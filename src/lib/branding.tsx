@@ -112,7 +112,7 @@ export function BrandingEffect() {
         })();
       el.href = branding.logo_data;
     } else if (link) {
-      link.href = "/vite.svg";
+      link.href = "/favicon.png";
     }
   }, [branding]);
 

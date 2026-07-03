@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { useBranding } from "@/lib/branding";
 import type { Absence, AbsenceKind, DayPart, OverviewResponse } from "@/lib/types";
 import { businessDayCount, formatDateRange, toISODate } from "@/lib/dates";
+import { hapticSuccess, hapticWarning } from "@/lib/haptics";
 import {
   Dialog,
   DialogContent,
@@ -69,10 +70,14 @@ export function BookAbsenceDialog({
       user_id?: string;
     }) => api<Absence>("/api/absences", { method: "POST", body }),
     onSuccess: () => {
+      hapticSuccess();
       void queryClient.invalidateQueries({ queryKey: ["me"] });
       void queryClient.invalidateQueries({ queryKey: ["absences"] });
       void queryClient.invalidateQueries({ queryKey: ["overview"] });
       onOpenChange(false);
+    },
+    onError: () => {
+      hapticWarning();
     },
   });
 

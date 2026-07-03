@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { queryKeys } from "@/lib/queryClient";
 import type { Absence, CompanyDay, MeResponse, OverviewResponse } from "@/lib/types";
 import { eachDayOfRange, formatDateRange, toISODate } from "@/lib/dates";
+import { hapticSuccess, hapticTap } from "@/lib/haptics";
 import { YearSwitcher } from "@/components/app/YearSwitcher";
 import { YearGrid } from "@/components/calendar/YearGrid";
 import { MonthWidget } from "@/components/calendar/MonthWidget";
@@ -116,6 +117,7 @@ export function MyCalendar() {
     mutationFn: (id: string) =>
       api<Absence | undefined>(`/api/absences/${id}`, { method: "DELETE" }),
     onSuccess: () => {
+      hapticSuccess();
       void queryClient.invalidateQueries({ queryKey: ["me"] });
       void queryClient.invalidateQueries({ queryKey: ["absences"] });
       void queryClient.invalidateQueries({ queryKey: ["overview"] });
@@ -136,6 +138,7 @@ export function MyCalendar() {
     (cancelTarget.status === "approved" || cancelTarget.status === "cancel_pending");
 
   const openBooking = (iso: string | null) => {
+    hapticTap();
     setBookingDate(iso);
     setBookingOpen(true);
   };
@@ -160,7 +163,7 @@ export function MyCalendar() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="card flex items-center gap-6 p-6">
+        <div className="card flex flex-wrap items-center gap-6 p-6">
           {summary ? (
             <>
               <div className="flex flex-col items-center gap-1.5">

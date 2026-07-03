@@ -12,6 +12,7 @@ import {
   MONTH_NAMES,
   toISODate,
 } from "@/lib/dates";
+import { hapticSuccess } from "@/lib/haptics";
 import { YearSwitcher } from "@/components/app/YearSwitcher";
 import { BookAbsenceDialog } from "@/components/BookAbsenceDialog";
 import { Badge } from "@/components/ui/badge";
@@ -106,6 +107,7 @@ function DenyDialog({
         body: { reason: body.reason },
       }),
     onSuccess: () => {
+      hapticSuccess();
       void queryClient.invalidateQueries({ queryKey: ["overview"] });
       void queryClient.invalidateQueries({ queryKey: ["absences"] });
       void queryClient.invalidateQueries({ queryKey: ["me"] });
@@ -191,6 +193,7 @@ function PendingRequests({
   const approveMutation = useMutation({
     mutationFn: (id: string) => api<Absence>(`/api/absences/${id}/approve`, { method: "POST" }),
     onSuccess: () => {
+      hapticSuccess();
       void queryClient.invalidateQueries({ queryKey: ["overview"] });
       void queryClient.invalidateQueries({ queryKey: ["absences"] });
       void queryClient.invalidateQueries({ queryKey: ["me"] });
@@ -227,7 +230,7 @@ function PendingRequests({
                   <p className="mt-0.5 text-xs text-fg-muted">Note: {absence.note}</p>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   size="sm"
                   disabled={approveMutation.isPending}

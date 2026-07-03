@@ -32,7 +32,8 @@ export function DayCell({
   const othersTitle = hasOthers ? `Away: ${others!.join(", ")}` : "";
 
   const className = cn(
-    "relative flex h-6 w-full select-none items-center justify-center rounded-[5px] text-[10px] leading-none tabular-nums transition-colors",
+    // Slightly taller cells below md: 24px is a hard touch target on phones.
+    "relative flex h-7 w-full select-none items-center justify-center rounded-[5px] text-[10px] leading-none tabular-nums transition-colors md:h-6",
     day.weekend
       ? "bg-bg-muted/45 text-fg-subtle/55"
       : kind === "vacation"

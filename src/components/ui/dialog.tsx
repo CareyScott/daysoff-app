@@ -27,11 +27,12 @@ export const DialogContent = React.forwardRef<
   <DialogPortal>
     <DialogOverlay />
     {/* Use inset-0 + flex centering instead of translate (Tailwind v4 compat) */}
-    <div className="fixed inset-0 z-50 flex items-start justify-center px-4 py-12">
+    {/* Phones: bottom-sheet style (full width, flush bottom, rounded top). */}
+    <div className="fixed inset-0 z-50 flex items-end justify-center pt-12 sm:items-start sm:px-4 sm:py-12">
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          "relative flex max-h-[calc(100vh-6rem)] w-full max-w-md flex-col overflow-y-auto rounded-xl border border-border-default bg-bg-surface p-6 shadow-xl focus:outline-none",
+          "relative flex max-h-[calc(100dvh-3rem)] w-full max-w-md flex-col overflow-y-auto rounded-t-xl border border-border-default bg-bg-surface p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-xl focus:outline-none sm:max-h-[calc(100vh-6rem)] sm:rounded-xl sm:pb-6",
           className,
         )}
         // Radix Select/Popover content portals to <body>, outside this dialog's

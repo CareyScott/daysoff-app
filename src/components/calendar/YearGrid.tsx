@@ -43,7 +43,8 @@ export function YearGrid({
   const todayIso = toISODate(new Date());
 
   return (
-    <div className="overflow-x-auto">
+    // Negative margin lets the scroll area bleed to the card edge on phones.
+    <div className="-mx-2 overflow-x-auto px-2">
       <div className="min-w-[720px] space-y-[3px]">
         {/* Weekday header, repeating Mon..Sun across all 37 columns */}
         <div className="flex items-center gap-2.5 pb-0.5">

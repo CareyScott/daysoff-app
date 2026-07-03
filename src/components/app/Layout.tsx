@@ -10,6 +10,7 @@ import {
 import { BrandMark } from "@/components/app/BrandMark";
 import { useAuth } from "@/lib/auth";
 import { useBranding } from "@/lib/branding";
+import { hapticTap } from "@/lib/haptics";
 import { cn, initials } from "@/lib/utils";
 
 interface NavItem {
@@ -41,8 +42,29 @@ export function Layout() {
   };
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-border-default bg-bg-sidebar px-3 py-5">
+    <div className="flex min-h-screen flex-col md:flex-row">
+      {/* Mobile top bar (below md) */}
+      <header className="sticky top-0 z-40 flex h-12 shrink-0 items-center gap-2.5 border-b border-border-default bg-bg-surface px-4 md:hidden">
+        <BrandMark className="h-7 w-7" />
+        <span className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-tight">
+          {branding.company_name}
+        </span>
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[10px] font-semibold text-accent-strong">
+          {initials(user?.name)}
+        </span>
+        <button
+          type="button"
+          onClick={handleLogout}
+          title="Log out"
+          className="rounded-md p-1.5 text-fg-muted transition-colors hover:bg-bg-muted hover:text-fg-default"
+        >
+          <LogOut className="h-4 w-4" />
+          <span className="sr-only">Log out</span>
+        </button>
+      </header>
+
+      {/* Desktop sidebar (md and up) */}
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border-default bg-bg-sidebar px-3 py-5 md:flex">
         <div className="flex items-center gap-2.5 px-2">
           <BrandMark className="h-8 w-8" />
           <span className="truncate text-[15px] font-semibold tracking-tight">
@@ -92,10 +114,37 @@ export function Layout() {
       </aside>
 
       <main className="min-w-0 flex-1">
-        <div className="mx-auto w-full max-w-6xl px-8 py-8">
+        {/* pb-20 keeps the mobile tab bar from covering content */}
+        <div className="mx-auto w-full max-w-6xl px-4 py-5 pb-20 md:px-8 md:py-8 md:pb-8">
           <Outlet />
         </div>
       </main>
+
+      {/* Mobile bottom tab bar (below md) */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border-default bg-bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+        aria-label="Primary"
+      >
+        <div className="flex h-14">
+          {items.map(({ to, label, icon: Icon, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              onClick={() => hapticTap()}
+              className={({ isActive }) =>
+                cn(
+                  "flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors",
+                  isActive ? "text-accent-strong" : "text-fg-muted",
+                )
+              }
+            >
+              <Icon className="h-5 w-5 shrink-0" />
+              {label}
+            </NavLink>
+          ))}
+        </div>
+      </nav>
     </div>
   );
 }
