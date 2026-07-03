@@ -34,6 +34,16 @@ export const DialogContent = React.forwardRef<
           "relative flex max-h-[calc(100vh-6rem)] w-full max-w-md flex-col overflow-y-auto rounded-xl border border-border-default bg-bg-surface p-6 shadow-xl focus:outline-none",
           className,
         )}
+        // Radix Select/Popover content portals to <body>, outside this dialog's
+        // DOM. Without this guard, interacting with an open select (e.g.
+        // clicking its trigger a second time) counts as an "outside" pointer
+        // event and closes the whole dialog.
+        onPointerDownOutside={(event) => {
+          const target = event.target as HTMLElement | null;
+          if (target?.closest("[data-radix-popper-content-wrapper]")) {
+            event.preventDefault();
+          }
+        }}
         {...props}
       >
         {children}
