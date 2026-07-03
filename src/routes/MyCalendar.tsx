@@ -59,7 +59,12 @@ export function MyCalendar() {
 
   const [bookingOpen, setBookingOpen] = useState(false);
   const [bookingDate, setBookingDate] = useState<string | null>(null);
-  const [cancelTarget, setCancelTarget] = useState<Absence | null>(null);
+  const [cancelTarget, setCancelTargetState] = useState<Absence | null>(null);
+  const [cancelAcknowledged, setCancelAcknowledged] = useState(false);
+  const setCancelTarget = (absence: Absence | null) => {
+    setCancelAcknowledged(false);
+    setCancelTargetState(absence);
+  };
 
   const meQuery = useQuery({
     queryKey: queryKeys.me(year),
@@ -232,14 +237,15 @@ export function MyCalendar() {
         }}
       >
         <DialogContent>
-          <DialogTitle>Cancel absence?</DialogTitle>
+          <DialogTitle>
+            {isCancellationRequest ? "Request cancellation?" : "Cancel absence?"}
+          </DialogTitle>
           {cancelTarget && isCancellationRequest && (
             <DialogDescription className="mt-2">
               This vacation ({formatDateRange(cancelTarget.start_date, cancelTarget.end_date)},{" "}
               {cancelTarget.business_days} business day
-              {cancelTarget.business_days === 1 ? "" : "s"}) has already started, so the
-              cancellation is not immediate: it is sent to an admin for approval, and the days
-              keep counting as taken until an admin approves it.
+              {cancelTarget.business_days === 1 ? "" : "s"}) has already started. An admin has
+              to approve the cancellation; the days count as taken until then.
             </DialogDescription>
           )}
           {cancelTarget && !isCancellationRequest && (
@@ -249,6 +255,17 @@ export function MyCalendar() {
               {cancelTarget.business_days} business day
               {cancelTarget.business_days === 1 ? "" : "s"}).
             </DialogDescription>
+          )}
+          {isCancellationRequest && (
+            <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-lg bg-bg-muted px-3 py-2.5 text-sm text-fg-default">
+              <input
+                type="checkbox"
+                checked={cancelAcknowledged}
+                onChange={(event) => setCancelAcknowledged(event.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+              />
+              I understand this will be sent to an admin for approval.
+            </label>
           )}
           {cancelMutation.isError && (
             <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger" role="alert">
@@ -261,7 +278,9 @@ export function MyCalendar() {
             </Button>
             <Button
               variant="danger"
-              disabled={cancelMutation.isPending}
+              disabled={
+                cancelMutation.isPending || (isCancellationRequest && !cancelAcknowledged)
+              }
               onClick={() => cancelTarget && cancelMutation.mutate(cancelTarget.id)}
             >
               {cancelMutation.isPending
@@ -269,7 +288,7 @@ export function MyCalendar() {
                   ? "Requesting…"
                   : "Cancelling…"
                 : isCancellationRequest
-                  ? "I'm aware this will be sent to an admin - request cancellation"
+                  ? "Request cancellation"
                   : "Cancel absence"}
             </Button>
           </div>
