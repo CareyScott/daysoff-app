@@ -26,15 +26,18 @@ export function YearGrid({ year, absences, onDayClick, onAbsenceClick }: YearGri
 
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-[820px] space-y-1.5">
+      <div className="min-w-[720px] space-y-[3px]">
         {/* Weekday header, repeating Mon..Sun across all 37 columns */}
-        <div className="flex items-center gap-3">
-          <div className="w-20 shrink-0" />
-          <div className="grid flex-1 gap-1" style={{ gridTemplateColumns: GRID_TEMPLATE }}>
+        <div className="flex items-center gap-2.5 pb-0.5">
+          <div className="w-16 shrink-0" />
+          <div
+            className="grid flex-1 gap-[3px]"
+            style={{ gridTemplateColumns: GRID_TEMPLATE }}
+          >
             {Array.from({ length: YEAR_GRID_COLUMNS }, (_, i) => (
               <div
                 key={i}
-                className="text-center text-[10px] font-medium text-fg-subtle"
+                className="text-center text-[9px] font-medium text-fg-subtle/70"
                 aria-hidden
               >
                 {WEEKDAY_LETTERS[i % 7]}
@@ -44,9 +47,14 @@ export function YearGrid({ year, absences, onDayClick, onAbsenceClick }: YearGri
         </div>
 
         {months.map((month) => (
-          <div key={month.month} className="flex items-center gap-3">
-            <div className="w-20 shrink-0 text-xs font-medium text-fg-muted">{month.name}</div>
-            <div className="grid flex-1 gap-1" style={{ gridTemplateColumns: GRID_TEMPLATE }}>
+          <div key={month.month} className="flex items-center gap-2.5">
+            <div className="w-16 shrink-0 text-[11px] font-medium text-fg-muted">
+              {month.name}
+            </div>
+            <div
+              className="grid flex-1 gap-[3px]"
+              style={{ gridTemplateColumns: GRID_TEMPLATE }}
+            >
               {month.days.map((day) => {
                 const absence = dayMap.get(day.iso);
                 return (

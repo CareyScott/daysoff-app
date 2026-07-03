@@ -12,3 +12,5 @@ dist
 # OS / editor
 .DS_Store
 *.local
+.vercel
+.env*

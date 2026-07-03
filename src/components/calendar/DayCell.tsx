@@ -15,28 +15,29 @@ export function DayCell({ day, absence, isToday, interactive, onSelect }: DayCel
   const kind = absence?.kind;
 
   const className = cn(
-    "flex h-7 w-full select-none items-center justify-center rounded-md text-[11px] tabular-nums transition-colors",
+    "flex h-6 w-full select-none items-center justify-center rounded-[5px] text-[10px] leading-none tabular-nums transition-colors",
     day.weekend
-      ? "bg-bg-muted text-fg-subtle"
+      ? "bg-bg-muted/45 text-fg-subtle/55"
       : kind === "vacation"
-        ? "bg-accent font-medium text-accent-fg"
+        ? "bg-accent font-semibold text-accent-fg"
         : kind === "sick"
-          ? "bg-sick font-medium text-white"
-          : "border border-border-default bg-bg-surface text-fg-muted",
+          ? "bg-sick font-semibold text-white"
+          : "bg-bg-muted text-fg-muted",
     interactive &&
       !day.weekend &&
       (kind
         ? "cursor-pointer hover:brightness-110"
-        : "cursor-pointer hover:border-accent hover:text-accent-strong"),
-    isToday && "ring-2 ring-accent/60 ring-offset-1 ring-offset-bg-surface",
+        : "cursor-pointer hover:bg-accent/25 hover:text-accent-strong"),
+    isToday && "ring-[1.5px] ring-inset ring-accent font-semibold",
   );
 
+  const label = String(day.dayOfMonth).padStart(2, "0");
   const style = { gridColumnStart: day.column };
 
   if (!interactive || day.weekend) {
     return (
       <div className={className} style={style}>
-        {day.dayOfMonth}
+        {label}
       </div>
     );
   }
@@ -53,7 +54,7 @@ export function DayCell({ day, absence, isToday, interactive, onSelect }: DayCel
           : `Book absence starting ${day.iso}`
       }
     >
-      {day.dayOfMonth}
+      {label}
     </button>
   );
 }
