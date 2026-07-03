@@ -4,7 +4,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useBranding } from "@/lib/branding";
 import type { Absence, AbsenceKind, DayPart, OverviewResponse } from "@/lib/types";
-import { businessDayCount } from "@/lib/dates";
+import { businessDayCount, formatDateRange } from "@/lib/dates";
 import {
   Dialog,
   DialogContent,
@@ -116,7 +116,9 @@ export function BookAbsenceDialog({
       )
       .map((a) => ({
         name: names.get(a.user_id) ?? "A teammate",
-        range: `${a.start_date <= startDate ? startDate : a.start_date} – ${a.end_date >= endDate ? endDate : a.end_date}`,
+        // Full absence range, not just the overlapping part — better context.
+        range: formatDateRange(a.start_date, a.end_date),
+        days: a.business_days,
         pending: a.status === "pending",
       }));
   })();
@@ -262,7 +264,8 @@ export function BookAbsenceDialog({
                 {clashes.slice(0, 4).map((clash, i) => (
                   <li key={i}>
                     {clash.name}
-                    {clash.pending ? " (pending request)" : ""} is away {clash.range}
+                    {clash.pending ? " (pending request)" : ""} is away {clash.range} (
+                    {clash.days} day{clash.days === 1 ? "" : "s"})
                   </li>
                 ))}
                 {clashes.length > 4 && <li>…and {clashes.length - 4} more</li>}
