@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { queryKeys } from "@/lib/queryClient";
 import type { Absence, CompanyDay, MeResponse, OverviewResponse } from "@/lib/types";
-import { eachDayOfRange, formatDateRange } from "@/lib/dates";
+import { eachDayOfRange, formatDateRange, toISODate } from "@/lib/dates";
 import { YearSwitcher } from "@/components/app/YearSwitcher";
 import { YearGrid } from "@/components/calendar/YearGrid";
 import { MonthWidget } from "@/components/calendar/MonthWidget";
@@ -105,8 +105,11 @@ export function MyCalendar() {
     return map;
   }, [overviewQuery.data, user?.id]);
 
+  // DELETE answers 204 (gone) or 200 + the absence (became a cancellation
+  // request for an already-started member vacation).
   const cancelMutation = useMutation({
-    mutationFn: (id: string) => api<void>(`/api/absences/${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) =>
+      api<Absence | undefined>(`/api/absences/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["me"] });
       void queryClient.invalidateQueries({ queryKey: ["absences"] });
@@ -117,6 +120,15 @@ export function MyCalendar() {
 
   const absences = absencesQuery.data ?? [];
   const summary = meQuery.data?.summary;
+
+  // Members cannot silently delete a vacation that already started: the
+  // "cancel" becomes a cancellation request an admin has to approve.
+  const todayIso = toISODate(new Date());
+  const isCancellationRequest =
+    user?.role === "member" &&
+    cancelTarget?.kind === "vacation" &&
+    cancelTarget.start_date < todayIso &&
+    (cancelTarget.status === "approved" || cancelTarget.status === "cancel_pending");
 
   const openBooking = (iso: string | null) => {
     setBookingDate(iso);
@@ -221,7 +233,16 @@ export function MyCalendar() {
       >
         <DialogContent>
           <DialogTitle>Cancel absence?</DialogTitle>
-          {cancelTarget && (
+          {cancelTarget && isCancellationRequest && (
+            <DialogDescription className="mt-2">
+              This vacation ({formatDateRange(cancelTarget.start_date, cancelTarget.end_date)},{" "}
+              {cancelTarget.business_days} business day
+              {cancelTarget.business_days === 1 ? "" : "s"}) has already started, so the
+              cancellation is not immediate: it is sent to an admin for approval, and the days
+              keep counting as taken until an admin approves it.
+            </DialogDescription>
+          )}
+          {cancelTarget && !isCancellationRequest && (
             <DialogDescription className="mt-2">
               This removes your {cancelTarget.kind === "vacation" ? "vacation" : "sick leave"}{" "}
               from {formatDateRange(cancelTarget.start_date, cancelTarget.end_date)} (
@@ -243,7 +264,13 @@ export function MyCalendar() {
               disabled={cancelMutation.isPending}
               onClick={() => cancelTarget && cancelMutation.mutate(cancelTarget.id)}
             >
-              {cancelMutation.isPending ? "Cancelling…" : "Cancel absence"}
+              {cancelMutation.isPending
+                ? isCancellationRequest
+                  ? "Requesting…"
+                  : "Cancelling…"
+                : isCancellationRequest
+                  ? "I'm aware this will be sent to an admin - request cancellation"
+                  : "Cancel absence"}
             </Button>
           </div>
         </DialogContent>

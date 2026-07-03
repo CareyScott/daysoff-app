@@ -93,5 +93,14 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   }
 
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  // Some endpoints answer 200 with a JSON body, others with none (e.g.
+  // DELETE /api/absences/:id returns the absence when the delete became a
+  // cancellation request, 204 otherwise). Tolerate both.
+  const text = await res.text();
+  if (!text) return undefined as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return undefined as T;
+  }
 }

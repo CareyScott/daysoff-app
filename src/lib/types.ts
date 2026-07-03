@@ -1,6 +1,6 @@
 export type Role = "admin" | "member";
 export type AbsenceKind = "vacation" | "sick";
-export type AbsenceStatus = "pending" | "approved" | "denied";
+export type AbsenceStatus = "pending" | "approved" | "denied" | "cancel_pending";
 export type DayPart = "full" | "am" | "pm";
 
 export interface User {

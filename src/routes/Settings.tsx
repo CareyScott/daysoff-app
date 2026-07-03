@@ -6,7 +6,7 @@ import { z } from "zod";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useBranding, type WorkspaceSettings } from "@/lib/branding";
-import type { CompanyDay } from "@/lib/types";
+import type { CompanyDay, User } from "@/lib/types";
 import { formatDateRange } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -380,6 +380,66 @@ function CompanyDaysCard() {
   );
 }
 
+/** Inline display-name editor: PATCH /api/me, then sync the stored user. */
+function AccountNameRow() {
+  const { user, updateUser } = useAuth();
+  const [name, setName] = useState(user?.name ?? "");
+
+  useEffect(() => {
+    setName(user?.name ?? "");
+  }, [user?.name]);
+
+  const mutation = useMutation({
+    mutationFn: (body: { name: string }) =>
+      api<User>("/api/me", { method: "PATCH", body }),
+    onSuccess: (_data, variables) => {
+      if (user) updateUser({ ...user, name: variables.name });
+    },
+  });
+
+  const trimmed = name.trim();
+  const canSave =
+    trimmed.length >= 1 &&
+    trimmed.length <= 80 &&
+    trimmed !== user?.name &&
+    !mutation.isPending;
+
+  const errorMessage = mutation.isError
+    ? mutation.error instanceof ApiError
+      ? mutation.error.message
+      : "Something went wrong. Please try again."
+    : null;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-4">
+        <dt className="text-fg-muted">Name</dt>
+        <dd className="flex items-center gap-2">
+          <Input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={80}
+            className="h-8 w-48"
+            aria-label="Display name"
+          />
+          <Button
+            size="sm"
+            disabled={!canSave}
+            onClick={() => mutation.mutate({ name: trimmed })}
+          >
+            {mutation.isPending ? "Saving…" : "Save"}
+          </Button>
+        </dd>
+      </div>
+      {errorMessage && (
+        <p className="mt-2 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger" role="alert">
+          {errorMessage}
+        </p>
+      )}
+    </div>
+  );
+}
+
 const passwordSchema = z
   .object({
     current_password: z.string().min(1, "Current password is required"),
@@ -474,10 +534,7 @@ export function Settings() {
       <div className="card max-w-lg p-6">
         <h2 className="text-section">Account</h2>
         <dl className="mt-4 space-y-3 text-sm">
-          <div className="flex items-center justify-between gap-4">
-            <dt className="text-fg-muted">Name</dt>
-            <dd className="font-medium">{user?.name}</dd>
-          </div>
+          <AccountNameRow />
           <div className="flex items-center justify-between gap-4">
             <dt className="text-fg-muted">Email</dt>
             <dd className="font-medium">{user?.email}</dd>

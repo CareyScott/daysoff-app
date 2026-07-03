@@ -4,7 +4,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useBranding } from "@/lib/branding";
 import type { Absence, AbsenceKind, DayPart, OverviewResponse } from "@/lib/types";
-import { businessDayCount, formatDateRange } from "@/lib/dates";
+import { businessDayCount, formatDateRange, toISODate } from "@/lib/dates";
 import {
   Dialog,
   DialogContent,
@@ -97,9 +97,17 @@ export function BookAbsenceDialog({
   const businessDays = effectiveDayPart !== "full" && fullDays > 0 ? 0.5 : fullDays;
   const canSubmit = Boolean(startDate && endDate) && businessDays > 0 && !mutation.isPending;
 
-  // Members' vacation requests need admin sign-off when the workspace says so.
+  // Members' vacation requests need admin sign-off when the workspace says
+  // so; backdated member vacations always do, regardless of the setting.
+  const todayIso = toISODate(new Date());
+  const isPastMemberVacation =
+    user?.role === "member" &&
+    kind === "vacation" &&
+    Boolean(startDate) &&
+    startDate < todayIso;
   const needsApproval =
-    branding.require_approval && user?.role === "member" && kind === "vacation";
+    (branding.require_approval && user?.role === "member" && kind === "vacation") ||
+    isPastMemberVacation;
 
   // Non-blocking heads-up when the chosen dates overlap teammates' absences.
   const targetUserId = isAdmin && forUserId ? forUserId : user?.id;
@@ -271,6 +279,12 @@ export function BookAbsenceDialog({
                 {clashes.length > 4 && <li>…and {clashes.length - 4} more</li>}
               </ul>
             </div>
+          )}
+
+          {isPastMemberVacation && (
+            <p className="rounded-lg bg-bg-muted px-3 py-2 text-xs text-fg-muted">
+              Booking in the past always requires admin approval.
+            </p>
           )}
 
           {needsApproval && (

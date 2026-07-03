@@ -22,6 +22,11 @@ function AbsenceRow({
             Pending
           </Badge>
         )}
+        {absence.status === "cancel_pending" && (
+          <Badge className="border border-sick/50 bg-transparent text-sick-strong">
+            Cancellation requested
+          </Badge>
+        )}
         {absence.status === "denied" && <Badge variant="danger">Denied</Badge>}
         <span className="flex-1 text-sm">
           {formatDateRange(absence.start_date, absence.end_date)}
@@ -36,9 +41,15 @@ function AbsenceRow({
           <Button
             variant="ghost"
             size="icon"
+            disabled={absence.status === "cancel_pending"}
             onClick={() => onCancel(absence)}
-            title="Cancel this absence"
-            className="text-fg-muted hover:text-danger"
+            title={
+              absence.status === "cancel_pending"
+                ? "Waiting for an admin"
+                : "Cancel this absence"
+            }
+            // Keep the tooltip readable on the disabled button.
+            className="text-fg-muted hover:text-danger disabled:pointer-events-auto"
           >
             <Trash2 className="h-4 w-4" />
             <span className="sr-only">Cancel absence</span>
@@ -48,6 +59,12 @@ function AbsenceRow({
       {absence.note && <p className="mt-1 text-xs text-fg-muted">Note: {absence.note}</p>}
       {absence.status === "denied" && absence.decision_reason && (
         <p className="mt-1 text-xs text-danger">Denied: {absence.decision_reason}</p>
+      )}
+      {/* An approved absence with a reason means a cancellation was rejected. */}
+      {absence.status === "approved" && absence.decision_reason && (
+        <p className="mt-1 text-xs text-fg-muted">
+          Cancellation declined: {absence.decision_reason}
+        </p>
       )}
     </li>
   );
@@ -94,7 +111,9 @@ export function AbsenceList({
           <h3 className="text-label">Past</h3>
           <ul className="divide-y divide-border-default">
             {past.map((absence) => (
-              <AbsenceRow key={absence.id} absence={absence} />
+              // Past rows stay actionable: members requesting cancellation of
+              // a taken vacation, admins removing entries directly.
+              <AbsenceRow key={absence.id} absence={absence} onCancel={onCancel} />
             ))}
           </ul>
         </section>

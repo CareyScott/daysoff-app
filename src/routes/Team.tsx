@@ -208,6 +208,11 @@ function PendingRequests({
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
                   {requester?.name ?? "Unknown user"}
+                  {absence.status === "cancel_pending" && (
+                    <Badge className="border border-sick/50 bg-transparent text-sick-strong">
+                      Cancellation request
+                    </Badge>
+                  )}
                   <Badge variant={absence.kind === "vacation" ? "vacation" : "sick"}>
                     {absence.kind === "vacation" ? "Vacation" : "Sick"}
                   </Badge>
@@ -228,7 +233,7 @@ function PendingRequests({
                   disabled={approveMutation.isPending}
                   onClick={() => approveMutation.mutate(absence.id)}
                 >
-                  Approve
+                  {absence.status === "cancel_pending" ? "Approve cancellation" : "Approve"}
                 </Button>
                 <Button
                   variant="outline"
@@ -395,7 +400,7 @@ export function Team() {
   const pending = useMemo(
     () =>
       (overviewQuery.data?.absences ?? [])
-        .filter((a) => a.status === "pending")
+        .filter((a) => a.status === "pending" || a.status === "cancel_pending")
         .sort((a, b) => a.start_date.localeCompare(b.start_date)),
     [overviewQuery.data],
   );

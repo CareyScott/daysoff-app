@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 export interface WorkspaceSettings {
   company_name: string;
@@ -11,7 +12,7 @@ export interface WorkspaceSettings {
   logo_data: string | null;
   /** Members' vacation requests need an admin approval when true. */
   require_approval: boolean;
-  /** Hide company name + logo on the login screen (and browser tab). */
+  /** Hide company name + logo on the login screen only. */
   hide_login_branding: boolean;
 }
 
@@ -24,11 +25,16 @@ export const DEFAULT_BRANDING: WorkspaceSettings = {
   hide_login_branding: false,
 };
 
-const BRANDING_CACHE_KEY = "daysoff-branding";
+// Separate snapshots for the anonymous (login screen) and authenticated
+// states: the anonymous one may be masked and must never contain the
+// company identity when hiding is on; the authenticated one is complete.
+function cacheKey(authed: boolean): string {
+  return authed ? "daysoff-branding:auth" : "daysoff-branding:anon";
+}
 
-function readCachedBranding(): WorkspaceSettings | undefined {
+function readCachedBranding(authed: boolean): WorkspaceSettings | undefined {
   try {
-    const raw = localStorage.getItem(BRANDING_CACHE_KEY);
+    const raw = localStorage.getItem(cacheKey(authed));
     return raw ? (JSON.parse(raw) as WorkspaceSettings) : undefined;
   } catch {
     return undefined;
@@ -36,30 +42,28 @@ function readCachedBranding(): WorkspaceSettings | undefined {
 }
 
 /**
- * Workspace branding from the API (public endpoint, available on the
- * login screen too). Paints instantly from a localStorage snapshot of the
- * last-seen branding (avoids a flash of default styling on refresh) and
- * refreshes from the server in the background.
+ * Workspace branding from the API. The server masks company name + logo on
+ * anonymous requests when hide_login_branding is on, so the login screen
+ * stays anonymous while the logged-in app shows full branding. Fetches are
+ * keyed by auth state so logging in refetches the full payload. Paints
+ * instantly from a localStorage snapshot to avoid a flash of defaults.
  */
 export function useBranding(): WorkspaceSettings {
+  const { token } = useAuth();
+  const authed = Boolean(token);
+
   const { data } = useQuery({
-    queryKey: ["settings"],
+    queryKey: ["settings", authed],
     queryFn: async () => {
-      const settings = await api<WorkspaceSettings>("/api/settings");
+      const settings = await api<WorkspaceSettings>("/api/settings", { auth: authed });
       try {
-        // Never cache the company identity when login branding is hidden:
-        // the cached snapshot paints the login screen, which must stay
-        // anonymous (colors only).
-        const cacheable: WorkspaceSettings = settings.hide_login_branding
-          ? { ...settings, company_name: "", logo_data: null }
-          : settings;
-        localStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(cacheable));
+        localStorage.setItem(cacheKey(authed), JSON.stringify(settings));
       } catch {
         // cache is best-effort
       }
       return settings;
     },
-    placeholderData: readCachedBranding,
+    placeholderData: () => readCachedBranding(authed),
     staleTime: 5 * 60_000,
     retry: 1,
   });
@@ -88,25 +92,27 @@ export function BrandingEffect() {
     root.setProperty("--color-accent-soft", `color-mix(in srgb, ${accent} 14%, white)`);
     root.setProperty("--brand-bg", brandBackground(branding));
 
+    // The server already masks company_name/logo_data when this client
+    // shouldn't see them (anonymous + hide_login_branding). Render whatever
+    // the payload contains.
     document.title =
-      branding.hide_login_branding ||
-      branding.company_name === DEFAULT_BRANDING.company_name ||
-      branding.company_name === ""
-        ? "Daysoff"
-        : `${branding.company_name} · Daysoff`;
+      branding.company_name && branding.company_name !== DEFAULT_BRANDING.company_name
+        ? `${branding.company_name} · Daysoff`
+        : "Daysoff";
 
-    if (branding.hide_login_branding) {
-      // Tab must not leak company identity: undo any previously set logo favicon.
-      const link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
-      if (link) link.href = "/vite.svg";
-    } else if (branding.logo_data) {
-      let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
-      if (!link) {
-        link = document.createElement("link");
-        link.rel = "icon";
-        document.head.appendChild(link);
-      }
-      link.href = branding.logo_data;
+    const link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+    if (branding.logo_data) {
+      const el =
+        link ??
+        (() => {
+          const created = document.createElement("link");
+          created.rel = "icon";
+          document.head.appendChild(created);
+          return created;
+        })();
+      el.href = branding.logo_data;
+    } else if (link) {
+      link.href = "/vite.svg";
     }
   }, [branding]);
 
