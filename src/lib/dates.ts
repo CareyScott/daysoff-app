@@ -1,4 +1,4 @@
-import type { Absence } from "@/lib/types";
+import type { Absence, CompanyDay } from "@/lib/types";
 
 export const MONTH_NAMES = [
   "January",
@@ -112,14 +112,32 @@ export function buildYearDays(year: number): YearDay[] {
   return days;
 }
 
-/** Map of every covered ISO day -> its absence, for O(1) day coloring. */
+/**
+ * Map of every covered ISO day -> its absence, for O(1) day coloring.
+ * Denied absences are excluded: their dates are free again.
+ */
 export function absenceDayMap(absences: Absence[]): Map<string, Absence> {
   const map = new Map<string, Absence>();
   for (const absence of absences) {
+    if (absence.status === "denied") continue;
     const end = parseISODate(absence.end_date);
     const cur = parseISODate(absence.start_date);
     while (cur <= end) {
       map.set(toISODate(cur), absence);
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
+  return map;
+}
+
+/** Map of every covered ISO day -> its company day, for O(1) day coloring. */
+export function companyDayMap(companyDays: CompanyDay[]): Map<string, CompanyDay> {
+  const map = new Map<string, CompanyDay>();
+  for (const companyDay of companyDays) {
+    const end = parseISODate(companyDay.end_date);
+    const cur = parseISODate(companyDay.start_date);
+    while (cur <= end) {
+      map.set(toISODate(cur), companyDay);
       cur.setDate(cur.getDate() + 1);
     }
   }

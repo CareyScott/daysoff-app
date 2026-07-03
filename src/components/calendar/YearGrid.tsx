@@ -1,6 +1,12 @@
 import { useMemo } from "react";
-import type { Absence } from "@/lib/types";
-import { absenceDayMap, buildYearGrid, toISODate, YEAR_GRID_COLUMNS } from "@/lib/dates";
+import type { Absence, CompanyDay } from "@/lib/types";
+import {
+  absenceDayMap,
+  buildYearGrid,
+  companyDayMap,
+  toISODate,
+  YEAR_GRID_COLUMNS,
+} from "@/lib/dates";
 import { DayCell } from "@/components/calendar/DayCell";
 
 const GRID_TEMPLATE = `repeat(${YEAR_GRID_COLUMNS}, minmax(0, 1fr))`;
@@ -10,6 +16,8 @@ export interface YearGridProps {
   year: number;
   /** Absences of the current user (drives coloring + click-to-cancel). */
   absences: Absence[];
+  /** Workspace-wide days off (rendered blue; own absences win). */
+  companyDays?: CompanyDay[];
   onDayClick?: (iso: string) => void;
   onAbsenceClick?: (absence: Absence) => void;
 }
@@ -19,9 +27,16 @@ export interface YearGridProps {
  * columns (each row offset by the Monday-first weekday of the 1st), so the
  * same weekday always sits in the same column.
  */
-export function YearGrid({ year, absences, onDayClick, onAbsenceClick }: YearGridProps) {
+export function YearGrid({
+  year,
+  absences,
+  companyDays,
+  onDayClick,
+  onAbsenceClick,
+}: YearGridProps) {
   const months = useMemo(() => buildYearGrid(year), [year]);
   const dayMap = useMemo(() => absenceDayMap(absences), [absences]);
+  const companyMap = useMemo(() => companyDayMap(companyDays ?? []), [companyDays]);
   const todayIso = toISODate(new Date());
 
   return (
@@ -62,6 +77,7 @@ export function YearGrid({ year, absences, onDayClick, onAbsenceClick }: YearGri
                     key={day.iso}
                     day={day}
                     absence={absence}
+                    companyDay={companyMap.get(day.iso)}
                     isToday={day.iso === todayIso}
                     interactive={!day.weekend}
                     onSelect={() =>

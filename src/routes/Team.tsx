@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarPlus } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { queryKeys } from "@/lib/queryClient";
 import type { Absence, OverviewResponse, OverviewUser } from "@/lib/types";
@@ -16,6 +16,13 @@ import { YearSwitcher } from "@/components/app/YearSwitcher";
 import { BookAbsenceDialog } from "@/components/BookAbsenceDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn, initials } from "@/lib/utils";
 
 /** Compact horizontal strip: one thin segment per day of the year. */
@@ -27,17 +34,27 @@ function YearStrip({ year, absences }: { year: number; absences: Absence[] }) {
   return (
     <div className="flex h-4 w-full overflow-hidden rounded-full border border-border-default">
       {days.map((day) => {
-        const kind = dayMap.get(day.iso)?.kind;
+        const absence = dayMap.get(day.iso);
+        const kind = absence?.kind;
+        const pending = absence?.status === "pending";
         return (
           <div
             key={day.iso}
-            title={kind ? `${kind === "vacation" ? "Vacation" : "Sick"}: ${day.iso}` : day.iso}
+            title={
+              kind
+                ? `${kind === "vacation" ? "Vacation" : "Sick"}${pending ? " (pending)" : ""}: ${day.iso}`
+                : day.iso
+            }
             className={cn(
               "min-w-0 flex-1",
               kind === "vacation"
-                ? "bg-accent"
+                ? pending
+                  ? "bg-accent/45"
+                  : "bg-accent"
                 : kind === "sick"
-                  ? "bg-sick"
+                  ? pending
+                    ? "bg-sick/45"
+                    : "bg-sick"
                   : day.weekend
                     ? "bg-bg-muted"
                     : "bg-bg-surface",
@@ -66,6 +83,176 @@ function MonthAxis({ year }: { year: number }) {
           </span>
         );
       })}
+    </div>
+  );
+}
+
+function DenyDialog({
+  absence,
+  userName,
+  onClose,
+}: {
+  absence: Absence | null;
+  userName: string;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [reason, setReason] = useState("");
+
+  const mutation = useMutation({
+    mutationFn: (body: { id: string; reason: string }) =>
+      api<Absence>(`/api/absences/${body.id}/deny`, {
+        method: "POST",
+        body: { reason: body.reason },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["overview"] });
+      void queryClient.invalidateQueries({ queryKey: ["absences"] });
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+      onClose();
+    },
+  });
+
+  useEffect(() => {
+    if (absence) {
+      setReason("");
+      mutation.reset();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [absence]);
+
+  const errorMessage = mutation.isError
+    ? mutation.error instanceof ApiError
+      ? mutation.error.message
+      : "Something went wrong. Please try again."
+    : null;
+
+  return (
+    <Dialog open={absence !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogTitle>Deny request{userName ? ` from ${userName}` : ""}</DialogTitle>
+        {absence && (
+          <DialogDescription className="mt-1">
+            {formatDateRange(absence.start_date, absence.end_date)} ({absence.business_days} day
+            {absence.business_days === 1 ? "" : "s"}). The reason is shown to the requester.
+          </DialogDescription>
+        )}
+        <form
+          className="mt-5 space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!absence || !reason.trim()) return;
+            mutation.mutate({ id: absence.id, reason: reason.trim() });
+          }}
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="deny-reason">Reason</Label>
+            <textarea
+              id="deny-reason"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="e.g. too many teammates out that week"
+              maxLength={500}
+              rows={3}
+              autoFocus
+              className="flex w-full resize-none rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm shadow-sm placeholder:text-fg-subtle disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+          {errorMessage && (
+            <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger" role="alert">
+              {errorMessage}
+            </p>
+          )}
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="danger" disabled={!reason.trim() || mutation.isPending}>
+              {mutation.isPending ? "Denying…" : "Deny request"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Admin card listing vacation requests waiting for a decision. */
+function PendingRequests({
+  pending,
+  usersById,
+}: {
+  pending: Absence[];
+  usersById: Map<string, OverviewUser>;
+}) {
+  const queryClient = useQueryClient();
+  const [denyTarget, setDenyTarget] = useState<Absence | null>(null);
+
+  const approveMutation = useMutation({
+    mutationFn: (id: string) => api<Absence>(`/api/absences/${id}/approve`, { method: "POST" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["overview"] });
+      void queryClient.invalidateQueries({ queryKey: ["absences"] });
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+  });
+
+  return (
+    <div className="card p-6">
+      <h2 className="text-section">Pending requests</h2>
+      <ul className="mt-3 divide-y divide-border-default">
+        {pending.map((absence) => {
+          const requester = usersById.get(absence.user_id);
+          return (
+            <li key={absence.id} className="flex flex-wrap items-center gap-3 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                  {requester?.name ?? "Unknown user"}
+                  <Badge variant={absence.kind === "vacation" ? "vacation" : "sick"}>
+                    {absence.kind === "vacation" ? "Vacation" : "Sick"}
+                  </Badge>
+                </p>
+                <p className="mt-0.5 text-xs text-fg-muted">
+                  {formatDateRange(absence.start_date, absence.end_date)} ·{" "}
+                  <span className="tabular-nums">
+                    {absence.business_days} day{absence.business_days === 1 ? "" : "s"}
+                  </span>
+                </p>
+                {absence.note && (
+                  <p className="mt-0.5 text-xs text-fg-muted">Note: {absence.note}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  disabled={approveMutation.isPending}
+                  onClick={() => approveMutation.mutate(absence.id)}
+                >
+                  Approve
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={approveMutation.isPending}
+                  onClick={() => setDenyTarget(absence)}
+                >
+                  Deny
+                </Button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {approveMutation.isError && (
+        <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger" role="alert">
+          Could not approve the request. Please try again.
+        </p>
+      )}
+      <DenyDialog
+        absence={denyTarget}
+        userName={denyTarget ? (usersById.get(denyTarget.user_id)?.name ?? "") : ""}
+        onClose={() => setDenyTarget(null)}
+      />
     </div>
   );
 }
@@ -200,12 +387,29 @@ export function Team() {
     );
   }, [overviewQuery.data]);
 
+  const usersById = useMemo(
+    () => new Map((overviewQuery.data?.users ?? []).map((u) => [u.id, u])),
+    [overviewQuery.data],
+  );
+
+  const pending = useMemo(
+    () =>
+      (overviewQuery.data?.absences ?? [])
+        .filter((a) => a.status === "pending")
+        .sort((a, b) => a.start_date.localeCompare(b.start_date)),
+    [overviewQuery.data],
+  );
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-page">Team</h1>
         <YearSwitcher year={year} onChange={setYear} />
       </header>
+
+      {isAdmin && pending.length > 0 && (
+        <PendingRequests pending={pending} usersById={usersById} />
+      )}
 
       <div className="card p-6">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-3">

@@ -12,25 +12,42 @@ function AbsenceRow({
   onCancel?: (absence: Absence) => void;
 }) {
   return (
-    <li className="flex items-center gap-3 py-2.5">
-      <Badge variant={absence.kind === "vacation" ? "vacation" : "sick"}>
-        {absence.kind === "vacation" ? "Vacation" : "Sick"}
-      </Badge>
-      <span className="flex-1 text-sm">{formatDateRange(absence.start_date, absence.end_date)}</span>
-      <span className="text-sm text-fg-muted tabular-nums">
-        {absence.business_days} day{absence.business_days === 1 ? "" : "s"}
-      </span>
-      {onCancel && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onCancel(absence)}
-          title="Cancel this absence"
-          className="text-fg-muted hover:text-danger"
-        >
-          <Trash2 className="h-4 w-4" />
-          <span className="sr-only">Cancel absence</span>
-        </Button>
+    <li className="py-2.5">
+      <div className="flex items-center gap-3">
+        <Badge variant={absence.kind === "vacation" ? "vacation" : "sick"}>
+          {absence.kind === "vacation" ? "Vacation" : "Sick"}
+        </Badge>
+        {absence.status === "pending" && (
+          <Badge className="border border-sick/50 bg-transparent text-sick-strong">
+            Pending
+          </Badge>
+        )}
+        {absence.status === "denied" && <Badge variant="danger">Denied</Badge>}
+        <span className="flex-1 text-sm">
+          {formatDateRange(absence.start_date, absence.end_date)}
+          {absence.day_part !== "full" && (
+            <span className="text-fg-muted"> ({absence.day_part === "am" ? "AM" : "PM"})</span>
+          )}
+        </span>
+        <span className="text-sm text-fg-muted tabular-nums">
+          {absence.business_days} day{absence.business_days === 1 ? "" : "s"}
+        </span>
+        {onCancel && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onCancel(absence)}
+            title="Cancel this absence"
+            className="text-fg-muted hover:text-danger"
+          >
+            <Trash2 className="h-4 w-4" />
+            <span className="sr-only">Cancel absence</span>
+          </Button>
+        )}
+      </div>
+      {absence.note && <p className="mt-1 text-xs text-fg-muted">Note: {absence.note}</p>}
+      {absence.status === "denied" && absence.decision_reason && (
+        <p className="mt-1 text-xs text-danger">Denied: {absence.decision_reason}</p>
       )}
     </li>
   );

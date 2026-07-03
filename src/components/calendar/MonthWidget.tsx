@@ -40,7 +40,9 @@ export function MonthWidget({ absences }: { absences: Absence[] }) {
         {Array.from({ length: daysInMonth }, (_, i) => {
           const date = new Date(year, month, i + 1);
           const iso = toISODate(date);
-          const kind = dayMap.get(iso)?.kind;
+          const absence = dayMap.get(iso);
+          const kind = absence?.kind;
+          const pending = absence?.status === "pending";
           const weekend = isWeekend(date);
           return (
             <div
@@ -50,9 +52,13 @@ export function MonthWidget({ absences }: { absences: Absence[] }) {
                 weekend
                   ? "bg-bg-muted text-fg-subtle"
                   : kind === "vacation"
-                    ? "bg-accent font-medium text-accent-fg"
+                    ? pending
+                      ? "bg-accent/50 font-medium text-accent-fg"
+                      : "bg-accent font-medium text-accent-fg"
                     : kind === "sick"
-                      ? "bg-sick font-medium text-white"
+                      ? pending
+                        ? "bg-sick/50 font-medium text-white"
+                        : "bg-sick font-medium text-white"
                       : "text-fg-muted",
                 iso === todayIso && "ring-2 ring-accent/60 ring-offset-1 ring-offset-bg-surface",
               )}

@@ -47,7 +47,8 @@ export function Login() {
         <div className="flex flex-col items-center text-center">
           <BrandMark className="h-11 w-11 rounded-xl" />
           <h1 className="mt-4 text-xl font-semibold tracking-tight">
-            {branding.company_name}
+            {/* Masked when login branding is hidden: stay generic. */}
+            {branding.company_name === "" ? "Sign in" : branding.company_name}
           </h1>
           <p className="mt-1 text-sm text-fg-muted">Sign in to track your days off</p>
         </div>

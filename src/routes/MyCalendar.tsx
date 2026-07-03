@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { api } from "@/lib/api";
 import { queryKeys } from "@/lib/queryClient";
-import type { Absence, MeResponse } from "@/lib/types";
+import type { Absence, CompanyDay, MeResponse } from "@/lib/types";
 import { formatDateRange } from "@/lib/dates";
 import { YearSwitcher } from "@/components/app/YearSwitcher";
 import { YearGrid } from "@/components/calendar/YearGrid";
@@ -27,6 +27,13 @@ function Legend() {
       </span>
       <span className="flex items-center gap-1.5">
         <span className="h-3 w-3 rounded bg-sick" /> Sick
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="h-3 w-3 rounded bg-company" /> Company day
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="h-3 w-3 rounded bg-accent/50 outline-dashed outline-1 -outline-offset-1 outline-accent-strong" />{" "}
+        Pending
       </span>
       <span className="flex items-center gap-1.5">
         <span className="h-3 w-3 rounded bg-bg-muted" /> Weekend
@@ -55,6 +62,11 @@ export function MyCalendar() {
   const absencesQuery = useQuery({
     queryKey: queryKeys.absences(year),
     queryFn: () => api<Absence[]>(`/api/absences?year=${year}`),
+  });
+
+  const companyDaysQuery = useQuery({
+    queryKey: ["company-days", year],
+    queryFn: () => api<CompanyDay[]>(`/api/company-days?year=${year}`),
   });
 
   const cancelMutation = useMutation({
@@ -98,7 +110,15 @@ export function MyCalendar() {
         <div className="card flex items-center gap-6 p-6">
           {summary ? (
             <>
-              <AllowanceRing summary={summary} />
+              <div className="flex flex-col items-center gap-1.5">
+                <AllowanceRing summary={summary} />
+                {summary.vacation_pending > 0 && (
+                  <p className="text-xs text-fg-muted tabular-nums">
+                    {summary.vacation_pending} day
+                    {summary.vacation_pending === 1 ? "" : "s"} pending approval
+                  </p>
+                )}
+              </div>
               <dl className="space-y-3 text-sm">
                 <div>
                   <dt className="text-label">Vacation taken</dt>
@@ -138,6 +158,7 @@ export function MyCalendar() {
           <YearGrid
             year={year}
             absences={absences}
+            companyDays={companyDaysQuery.data ?? []}
             onDayClick={openBooking}
             onAbsenceClick={setCancelTarget}
           />

@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { Absence, AbsenceKind, OverviewResponse } from "@/lib/types";
+import { useBranding } from "@/lib/branding";
+import type { Absence, AbsenceKind, DayPart, OverviewResponse } from "@/lib/types";
 import { businessDayCount } from "@/lib/dates";
 import {
   Dialog,
@@ -38,10 +39,13 @@ export function BookAbsenceDialog({
 }: BookAbsenceDialogProps) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const branding = useBranding();
   const isAdmin = user?.role === "admin";
   const [kind, setKind] = useState<AbsenceKind>("vacation");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [dayPart, setDayPart] = useState<DayPart>("full");
+  const [note, setNote] = useState("");
   const [forUserId, setForUserId] = useState<string>("");
 
   // Admins can book on behalf of teammates.
@@ -57,6 +61,8 @@ export function BookAbsenceDialog({
       kind: AbsenceKind;
       start_date: string;
       end_date: string;
+      note?: string;
+      day_part?: DayPart;
       user_id?: string;
     }) => api<Absence>("/api/absences", { method: "POST", body }),
     onSuccess: () => {
@@ -73,14 +79,24 @@ export function BookAbsenceDialog({
       setKind("vacation");
       setStartDate(initialDate ?? "");
       setEndDate(initialDate ?? "");
+      setDayPart("full");
+      setNote("");
       setForUserId(initialUserId ?? user?.id ?? "");
       mutation.reset();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialDate, initialUserId]);
 
-  const businessDays = businessDayCount(startDate, endDate);
+  const isSingleDay = Boolean(startDate) && startDate === endDate;
+  // AM/PM only makes sense for a single day; a range is always full days.
+  const effectiveDayPart: DayPart = isSingleDay ? dayPart : "full";
+  const fullDays = businessDayCount(startDate, endDate);
+  const businessDays = effectiveDayPart !== "full" && fullDays > 0 ? 0.5 : fullDays;
   const canSubmit = Boolean(startDate && endDate) && businessDays > 0 && !mutation.isPending;
+
+  // Members' vacation requests need admin sign-off when the workspace says so.
+  const needsApproval =
+    branding.require_approval && user?.role === "member" && kind === "vacation";
 
   const errorMessage =
     mutation.error instanceof ApiError
@@ -106,6 +122,8 @@ export function BookAbsenceDialog({
               kind,
               start_date: startDate,
               end_date: endDate,
+              ...(note.trim() ? { note: note.trim() } : {}),
+              ...(effectiveDayPart !== "full" ? { day_part: effectiveDayPart } : {}),
               ...(isAdmin && forUserId && forUserId !== user?.id
                 ? { user_id: forUserId }
                 : {}),
@@ -171,6 +189,35 @@ export function BookAbsenceDialog({
             </div>
           </div>
 
+          {isSingleDay && (
+            <div className="space-y-1.5">
+              <Label htmlFor="absence-day-part">Day part</Label>
+              <Select value={dayPart} onValueChange={(value) => setDayPart(value as DayPart)}>
+                <SelectTrigger id="absence-day-part">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full">Full day</SelectItem>
+                  <SelectItem value="am">Morning (AM)</SelectItem>
+                  <SelectItem value="pm">Afternoon (PM)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="absence-note">Note (optional)</Label>
+            <textarea
+              id="absence-note"
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="e.g. visiting family"
+              maxLength={500}
+              rows={2}
+              className="flex w-full resize-none rounded-md border border-border-default bg-bg-surface px-3 py-2 text-sm shadow-sm placeholder:text-fg-subtle disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+
           <div className="rounded-lg bg-bg-muted px-3 py-2 text-sm text-fg-muted">
             {businessDays > 0 ? (
               <>
@@ -181,6 +228,12 @@ export function BookAbsenceDialog({
               "Pick a start and end date"
             )}
           </div>
+
+          {needsApproval && (
+            <p className="text-xs text-fg-muted">
+              Your request will be sent to an admin for approval.
+            </p>
+          )}
 
           {errorMessage && (
             <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger" role="alert">
@@ -193,7 +246,11 @@ export function BookAbsenceDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={!canSubmit}>
-              {mutation.isPending ? "Booking…" : "Book absence"}
+              {mutation.isPending
+                ? "Booking…"
+                : needsApproval
+                  ? "Request vacation"
+                  : "Book absence"}
             </Button>
           </div>
         </form>

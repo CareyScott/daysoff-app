@@ -382,6 +382,7 @@ export function AdminUsers() {
           "Status",
           "Allowance (days)",
           "Vacation taken (days)",
+          "Vacation pending (days)",
           "Vacation remaining (days)",
           "Sick taken (days)",
           "Utilization (%)",
@@ -394,6 +395,7 @@ export function AdminUsers() {
           u.active ? "active" : "inactive",
           u.allowance,
           u.vacation_taken,
+          u.vacation_pending,
           u.remaining,
           u.sick_taken,
           u.allowance > 0 ? Math.round((u.vacation_taken / u.allowance) * 1000) / 10 : "",
@@ -401,12 +403,32 @@ export function AdminUsers() {
         ]),
         [],
         ["Absence detail"],
-        ["Name", "Email", "Type", "First day", "Last day", "Business days"],
+        [
+          "Name",
+          "Email",
+          "Type",
+          "First day",
+          "Last day",
+          "Business days",
+          "Status",
+          "Day part",
+          "Note",
+        ],
         ...absences
           .filter((a) => byId.has(a.user_id))
           .map((a) => {
             const u = byId.get(a.user_id)!;
-            return [u.name, u.email, a.kind, a.start_date, a.end_date, a.business_days];
+            return [
+              u.name,
+              u.email,
+              a.kind,
+              a.start_date,
+              a.end_date,
+              a.business_days,
+              a.status,
+              a.day_part,
+              a.note ?? "",
+            ];
           }),
       ];
 

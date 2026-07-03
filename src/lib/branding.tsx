@@ -9,6 +9,10 @@ export interface WorkspaceSettings {
   accent_color2: string | null;
   /** Optional company logo as a small data URL. */
   logo_data: string | null;
+  /** Members' vacation requests need an admin approval when true. */
+  require_approval: boolean;
+  /** Hide company name + logo on the login screen (and browser tab). */
+  hide_login_branding: boolean;
 }
 
 export const DEFAULT_BRANDING: WorkspaceSettings = {
@@ -16,6 +20,8 @@ export const DEFAULT_BRANDING: WorkspaceSettings = {
   accent_color: "#0d9488",
   accent_color2: null,
   logo_data: null,
+  require_approval: false,
+  hide_login_branding: false,
 };
 
 const BRANDING_CACHE_KEY = "daysoff-branding";
@@ -41,7 +47,13 @@ export function useBranding(): WorkspaceSettings {
     queryFn: async () => {
       const settings = await api<WorkspaceSettings>("/api/settings");
       try {
-        localStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(settings));
+        // Never cache the company identity when login branding is hidden:
+        // the cached snapshot paints the login screen, which must stay
+        // anonymous (colors only).
+        const cacheable: WorkspaceSettings = settings.hide_login_branding
+          ? { ...settings, company_name: "", logo_data: null }
+          : settings;
+        localStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(cacheable));
       } catch {
         // cache is best-effort
       }
@@ -77,11 +89,17 @@ export function BrandingEffect() {
     root.setProperty("--brand-bg", brandBackground(branding));
 
     document.title =
-      branding.company_name === DEFAULT_BRANDING.company_name
+      branding.hide_login_branding ||
+      branding.company_name === DEFAULT_BRANDING.company_name ||
+      branding.company_name === ""
         ? "Daysoff"
         : `${branding.company_name} · Daysoff`;
 
-    if (branding.logo_data) {
+    if (branding.hide_login_branding) {
+      // Tab must not leak company identity: undo any previously set logo favicon.
+      const link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+      if (link) link.href = "/vite.svg";
+    } else if (branding.logo_data) {
       let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
       if (!link) {
         link = document.createElement("link");

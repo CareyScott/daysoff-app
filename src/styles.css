@@ -32,6 +32,10 @@
   --color-sick-strong: #b45309;
   --color-sick-soft: #fef3c7;
 
+  /* Company days — blue */
+  --color-company: #3b82f6;
+  --color-company-soft: #dbeafe;
+
   /* Status */
   --color-danger: #dc2626;
   --color-danger-soft: #fee2e2;

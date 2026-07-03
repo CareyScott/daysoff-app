@@ -1,11 +1,13 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ShieldAlert } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ShieldAlert, Trash2 } from "lucide-react";
 import { z } from "zod";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useBranding, type WorkspaceSettings } from "@/lib/branding";
+import type { CompanyDay } from "@/lib/types";
+import { formatDateRange } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +44,8 @@ function WorkspaceCard() {
   const [useGradient, setUseGradient] = useState(Boolean(branding.accent_color2));
   const [accentColor2, setAccentColor2] = useState(branding.accent_color2 ?? "#7c3aed");
   const [logoData, setLogoData] = useState<string | null>(branding.logo_data);
+  const [requireApproval, setRequireApproval] = useState(branding.require_approval);
+  const [hideLoginBranding, setHideLoginBranding] = useState(branding.hide_login_branding);
   const [saved, setSaved] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
 
@@ -52,7 +56,16 @@ function WorkspaceCard() {
     setUseGradient(Boolean(branding.accent_color2));
     if (branding.accent_color2) setAccentColor2(branding.accent_color2);
     setLogoData(branding.logo_data);
-  }, [branding.company_name, branding.accent_color, branding.accent_color2, branding.logo_data]);
+    setRequireApproval(branding.require_approval);
+    setHideLoginBranding(branding.hide_login_branding);
+  }, [
+    branding.company_name,
+    branding.accent_color,
+    branding.accent_color2,
+    branding.logo_data,
+    branding.require_approval,
+    branding.hide_login_branding,
+  ]);
 
   const mutation = useMutation({
     mutationFn: (body: WorkspaceSettings) =>
@@ -92,6 +105,8 @@ function WorkspaceCard() {
             accent_color: accentColor,
             accent_color2: useGradient ? accentColor2 : null,
             logo_data: logoData,
+            require_approval: requireApproval,
+            hide_login_branding: hideLoginBranding,
           });
         }}
       >
@@ -181,6 +196,27 @@ function WorkspaceCard() {
           </p>
         </div>
 
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={requireApproval}
+              onChange={(event) => setRequireApproval(event.target.checked)}
+              className="h-4 w-4 accent-[var(--color-accent)]"
+            />
+            Require admin approval for vacation requests
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={hideLoginBranding}
+              onChange={(event) => setHideLoginBranding(event.target.checked)}
+              className="h-4 w-4 accent-[var(--color-accent)]"
+            />
+            Hide company name and logo on the login screen
+          </label>
+        </div>
+
         {error && (
           <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger" role="alert">
             {error}
@@ -194,6 +230,150 @@ function WorkspaceCard() {
 
         <Button type="submit" disabled={mutation.isPending}>
           {mutation.isPending ? "Saving…" : "Save workspace"}
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+/** Admin-managed workspace-wide days off (public holidays, office closures). */
+function CompanyDaysCard() {
+  const queryClient = useQueryClient();
+  const currentYear = new Date().getFullYear();
+  const [name, setName] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const companyDaysQuery = useQuery({
+    queryKey: ["company-days", currentYear],
+    queryFn: () => api<CompanyDay[]>(`/api/company-days?year=${currentYear}`),
+  });
+
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ["company-days"] });
+  };
+
+  const addMutation = useMutation({
+    mutationFn: (body: { name: string; start_date: string; end_date: string }) =>
+      api<CompanyDay>("/api/company-days", { method: "POST", body }),
+    onSuccess: () => {
+      invalidate();
+      setName("");
+      setStartDate("");
+      setEndDate("");
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api<void>(`/api/company-days/${id}`, { method: "DELETE" }),
+    onSuccess: invalidate,
+  });
+
+  const companyDays = companyDaysQuery.data ?? [];
+  const canAdd =
+    Boolean(name.trim() && startDate && endDate) &&
+    endDate >= startDate &&
+    !addMutation.isPending;
+
+  const mutationError = addMutation.error ?? deleteMutation.error;
+  const errorMessage = mutationError
+    ? mutationError instanceof ApiError
+      ? mutationError.message
+      : "Something went wrong. Please try again."
+    : null;
+
+  return (
+    <div className="card max-w-lg p-6">
+      <h2 className="text-section">Company days</h2>
+      <p className="mt-1 text-sm text-fg-muted">
+        Workspace-wide days off in {currentYear}, shown in blue on everyone's calendar.
+      </p>
+
+      {companyDaysQuery.isError && (
+        <p className="mt-4 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger" role="alert">
+          Could not load company days. Please try again.
+        </p>
+      )}
+
+      {companyDays.length === 0 && !companyDaysQuery.isLoading ? (
+        <p className="mt-4 py-1 text-sm text-fg-muted">No company days yet.</p>
+      ) : (
+        <ul className="mt-4 divide-y divide-border-default">
+          {companyDays.map((companyDay) => (
+            <li key={companyDay.id} className="flex items-center gap-3 py-2.5">
+              <span className="h-3 w-3 shrink-0 rounded bg-company" aria-hidden />
+              <span className="flex-1 truncate text-sm font-medium">{companyDay.name}</span>
+              <span className="text-sm text-fg-muted">
+                {formatDateRange(companyDay.start_date, companyDay.end_date)}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(companyDay.id)}
+                title={`Delete ${companyDay.name}`}
+                className="text-fg-muted hover:text-danger"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="sr-only">Delete company day</span>
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <form
+        className="mt-4 space-y-3 border-t border-border-default pt-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!canAdd) return;
+          addMutation.mutate({ name: name.trim(), start_date: startDate, end_date: endDate });
+        }}
+      >
+        <div className="space-y-1.5">
+          <Label htmlFor="company-day-name">Name</Label>
+          <Input
+            id="company-day-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="e.g. Summer party"
+            maxLength={100}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="company-day-start">First day</Label>
+            <Input
+              id="company-day-start"
+              type="date"
+              value={startDate}
+              onChange={(event) => {
+                const value = event.target.value;
+                setStartDate(value);
+                if (!endDate || endDate < value) setEndDate(value);
+              }}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="company-day-end">Last day</Label>
+            <Input
+              id="company-day-end"
+              type="date"
+              min={startDate || undefined}
+              value={endDate}
+              onChange={(event) => setEndDate(event.target.value)}
+            />
+          </div>
+        </div>
+
+        {errorMessage && (
+          <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger" role="alert">
+            {errorMessage}
+          </p>
+        )}
+
+        <Button type="submit" disabled={!canAdd}>
+          {addMutation.isPending ? "Adding…" : "Add"}
         </Button>
       </form>
     </div>
@@ -284,7 +464,12 @@ export function Settings() {
         </div>
       )}
 
-      {user?.role === "admin" && !mustChange && <WorkspaceCard />}
+      {user?.role === "admin" && !mustChange && (
+        <>
+          <WorkspaceCard />
+          <CompanyDaysCard />
+        </>
+      )}
 
       <div className="card max-w-lg p-6">
         <h2 className="text-section">Account</h2>
