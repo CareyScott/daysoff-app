@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarPlus } from "lucide-react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { queryKeys } from "@/lib/queryClient";
 import type { Absence, OverviewResponse, OverviewUser } from "@/lib/types";
 import {
@@ -11,7 +13,9 @@ import {
   toISODate,
 } from "@/lib/dates";
 import { YearSwitcher } from "@/components/app/YearSwitcher";
+import { BookAbsenceDialog } from "@/components/BookAbsenceDialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn, initials } from "@/lib/utils";
 
 /** Compact horizontal strip: one thin segment per day of the year. */
@@ -70,14 +74,28 @@ function TeamRow({
   user,
   year,
   absences,
+  isAdmin,
+  onBookFor,
 }: {
   user: OverviewUser;
   year: number;
   absences: Absence[];
+  isAdmin: boolean;
+  onBookFor: (userId: string) => void;
 }) {
+  const queryClient = useQueryClient();
   const upcoming = absences
     .filter((a) => a.end_date >= toISODate(new Date()))
     .sort((a, b) => a.start_date.localeCompare(b.start_date))[0];
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => api<void>(`/api/absences/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["overview"] });
+      void queryClient.invalidateQueries({ queryKey: ["absences"] });
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+  });
 
   return (
     <li className={cn("py-4", !user.active && "opacity-50")}>
@@ -97,6 +115,12 @@ function TeamRow({
               : "No upcoming absences"}
           </p>
         </div>
+        {isAdmin && (
+          <Button variant="outline" size="sm" onClick={() => onBookFor(user.id)}>
+            <CalendarPlus className="h-3.5 w-3.5" />
+            Book
+          </Button>
+        )}
         <div className="text-right">
           <p className="text-sm font-semibold tabular-nums">
             {user.remaining}
@@ -109,6 +133,39 @@ function TeamRow({
         <MonthAxis year={year} />
         <YearStrip year={year} absences={absences} />
       </div>
+      {isAdmin && absences.length > 0 && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs font-medium text-fg-muted hover:text-fg-default">
+            {absences.length} absence{absences.length === 1 ? "" : "s"} in {year}
+          </summary>
+          <ul className="mt-2 space-y-1">
+            {absences.map((absence) => (
+              <li
+                key={absence.id}
+                className="flex items-center justify-between gap-3 rounded-lg bg-bg-muted px-3 py-1.5 text-xs"
+              >
+                <span className="flex items-center gap-2">
+                  <Badge variant={absence.kind === "vacation" ? "vacation" : "sick"}>
+                    {absence.kind === "vacation" ? "Vacation" : "Sick"}
+                  </Badge>
+                  {formatDateRange(absence.start_date, absence.end_date)}
+                  <span className="text-fg-subtle">
+                    · {absence.business_days} day{absence.business_days === 1 ? "" : "s"}
+                  </span>
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={cancelMutation.isPending}
+                  onClick={() => cancelMutation.mutate(absence.id)}
+                >
+                  Cancel
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </li>
   );
 }
@@ -116,6 +173,9 @@ function TeamRow({
 export function Team() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const [bookFor, setBookFor] = useState<string | null>(null);
 
   const overviewQuery = useQuery({
     queryKey: queryKeys.overview(year),
@@ -171,16 +231,24 @@ export function Team() {
         )}
 
         <ul className="divide-y divide-border-default">
-          {users.map((user) => (
+          {users.map((teamUser) => (
             <TeamRow
-              key={user.id}
-              user={user}
+              key={teamUser.id}
+              user={teamUser}
               year={year}
-              absences={absencesByUser.get(user.id) ?? []}
+              absences={absencesByUser.get(teamUser.id) ?? []}
+              isAdmin={isAdmin}
+              onBookFor={setBookFor}
             />
           ))}
         </ul>
       </div>
+
+      <BookAbsenceDialog
+        open={bookFor !== null}
+        onOpenChange={(open) => !open && setBookFor(null)}
+        initialUserId={bookFor}
+      />
     </div>
   );
 }

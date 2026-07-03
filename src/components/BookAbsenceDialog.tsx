@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
-import type { Absence, AbsenceKind } from "@/lib/types";
+import { useAuth } from "@/lib/auth";
+import type { Absence, AbsenceKind, OverviewResponse } from "@/lib/types";
 import { businessDayCount } from "@/lib/dates";
 import {
   Dialog,
@@ -25,17 +26,39 @@ export interface BookAbsenceDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Prefills start + end when opened from a calendar day click. */
   initialDate?: string | null;
+  /** Admins: preselect who the absence is for (e.g. from the Team page). */
+  initialUserId?: string | null;
 }
 
-export function BookAbsenceDialog({ open, onOpenChange, initialDate }: BookAbsenceDialogProps) {
+export function BookAbsenceDialog({
+  open,
+  onOpenChange,
+  initialDate,
+  initialUserId,
+}: BookAbsenceDialogProps) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [kind, setKind] = useState<AbsenceKind>("vacation");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [forUserId, setForUserId] = useState<string>("");
+
+  // Admins can book on behalf of teammates.
+  const overviewQuery = useQuery({
+    queryKey: ["overview", new Date().getFullYear()],
+    queryFn: () => api<OverviewResponse>("/api/overview"),
+    enabled: open && isAdmin,
+  });
+  const teammates = (overviewQuery.data?.users ?? []).filter((u) => u.active);
 
   const mutation = useMutation({
-    mutationFn: (body: { kind: AbsenceKind; start_date: string; end_date: string }) =>
-      api<Absence>("/api/absences", { method: "POST", body }),
+    mutationFn: (body: {
+      kind: AbsenceKind;
+      start_date: string;
+      end_date: string;
+      user_id?: string;
+    }) => api<Absence>("/api/absences", { method: "POST", body }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["me"] });
       void queryClient.invalidateQueries({ queryKey: ["absences"] });
@@ -50,10 +73,11 @@ export function BookAbsenceDialog({ open, onOpenChange, initialDate }: BookAbsen
       setKind("vacation");
       setStartDate(initialDate ?? "");
       setEndDate(initialDate ?? "");
+      setForUserId(initialUserId ?? user?.id ?? "");
       mutation.reset();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialDate]);
+  }, [open, initialDate, initialUserId]);
 
   const businessDays = businessDayCount(startDate, endDate);
   const canSubmit = Boolean(startDate && endDate) && businessDays > 0 && !mutation.isPending;
@@ -78,9 +102,34 @@ export function BookAbsenceDialog({ open, onOpenChange, initialDate }: BookAbsen
           onSubmit={(event) => {
             event.preventDefault();
             if (!canSubmit) return;
-            mutation.mutate({ kind, start_date: startDate, end_date: endDate });
+            mutation.mutate({
+              kind,
+              start_date: startDate,
+              end_date: endDate,
+              ...(isAdmin && forUserId && forUserId !== user?.id
+                ? { user_id: forUserId }
+                : {}),
+            });
           }}
         >
+          {isAdmin && teammates.length > 1 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="absence-for">For</Label>
+              <Select value={forUserId} onValueChange={setForUserId}>
+                <SelectTrigger id="absence-for">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {teammates.map((teammate) => (
+                    <SelectItem key={teammate.id} value={teammate.id}>
+                      {teammate.id === user?.id ? `${teammate.name} (you)` : teammate.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label htmlFor="absence-kind">Type</Label>
             <Select value={kind} onValueChange={(value) => setKind(value as AbsenceKind)}>

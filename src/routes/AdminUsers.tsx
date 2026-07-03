@@ -1,10 +1,12 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Plus } from "lucide-react";
+import { Download, KeyRound, Plus } from "lucide-react";
 import { z } from "zod";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { downloadCsv, toCsv } from "@/lib/csv";
 import { queryKeys } from "@/lib/queryClient";
-import type { AdminUser, Role } from "@/lib/types";
+import type { Absence, AdminUser, OverviewResponse, Role } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -311,34 +313,129 @@ function SetPasswordDialog({
 
 export function AdminUsers() {
   const queryClient = useQueryClient();
+  const { user: currentUser } = useAuth();
   const year = new Date().getFullYear();
   const [addOpen, setAddOpen] = useState(false);
   const [passwordTarget, setPasswordTarget] = useState<AdminUser | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const usersQuery = useQuery({
     queryKey: queryKeys.users,
     queryFn: () => api<AdminUser[]>("/api/users"),
   });
 
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.users });
+    void queryClient.invalidateQueries({ queryKey: ["overview"] });
+  };
+
   const activeMutation = useMutation({
     mutationFn: (body: { id: string; active: boolean }) =>
       api<AdminUser>(`/api/users/${body.id}`, { method: "PATCH", body: { active: body.active } }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.users });
-      void queryClient.invalidateQueries({ queryKey: ["overview"] });
-    },
+    onSuccess: invalidate,
+  });
+
+  const roleMutation = useMutation({
+    mutationFn: (body: { id: string; role: Role }) =>
+      api<AdminUser>(`/api/users/${body.id}`, { method: "PATCH", body: { role: body.role } }),
+    onSuccess: invalidate,
   });
 
   const users = usersQuery.data ?? [];
+
+  const allSelected = users.length > 0 && users.every((u) => selected.has(u.id));
+  const toggleAll = () =>
+    setSelected(allSelected ? new Set() : new Set(users.map((u) => u.id)));
+  const toggleOne = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const exportIds = useMemo(
+    () => (selected.size > 0 ? selected : new Set(users.map((u) => u.id))),
+    [selected, users],
+  );
+
+  const exportCsv = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const [overview, absences] = await Promise.all([
+        api<OverviewResponse>(`/api/overview?year=${year}`),
+        api<Absence[]>(`/api/absences?year=${year}`),
+      ]);
+      const included = overview.users.filter((u) => exportIds.has(u.id));
+      const byId = new Map(included.map((u) => [u.id, u]));
+
+      const rows: (string | number)[][] = [
+        [`Vacation report ${year}`],
+        [],
+        [
+          "Name",
+          "Email",
+          "Role",
+          "Status",
+          "Allowance (days)",
+          "Vacation taken (days)",
+          "Vacation remaining (days)",
+          "Sick taken (days)",
+          "Utilization (%)",
+          "Absence bookings",
+        ],
+        ...included.map((u) => [
+          u.name,
+          u.email,
+          u.role,
+          u.active ? "active" : "inactive",
+          u.allowance,
+          u.vacation_taken,
+          u.remaining,
+          u.sick_taken,
+          u.allowance > 0 ? Math.round((u.vacation_taken / u.allowance) * 1000) / 10 : "",
+          absences.filter((a) => a.user_id === u.id).length,
+        ]),
+        [],
+        ["Absence detail"],
+        ["Name", "Email", "Type", "First day", "Last day", "Business days"],
+        ...absences
+          .filter((a) => byId.has(a.user_id))
+          .map((a) => {
+            const u = byId.get(a.user_id)!;
+            return [u.name, u.email, a.kind, a.start_date, a.end_date, a.business_days];
+          }),
+      ];
+
+      downloadCsv(`vacation-report-${year}.csv`, toCsv(rows));
+    } catch {
+      setExportError("Export failed. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-page">Users</h1>
-        <Button onClick={() => setAddOpen(true)}>
-          <Plus className="h-4 w-4" />
-          Add user
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => void exportCsv()} disabled={exporting}>
+            <Download className="h-4 w-4" />
+            {exporting
+              ? "Exporting…"
+              : selected.size > 0
+                ? `Export ${selected.size} selected (CSV)`
+                : "Export all (CSV)"}
+          </Button>
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Add user
+          </Button>
+        </div>
       </header>
 
       {usersQuery.isError && (
@@ -346,12 +443,26 @@ export function AdminUsers() {
           Could not load users. Please try again.
         </p>
       )}
+      {exportError && (
+        <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger" role="alert">
+          {exportError}
+        </p>
+      )}
 
       <div className="card overflow-x-auto">
-        <table className="w-full min-w-[720px] text-sm">
+        <table className="w-full min-w-[820px] text-sm">
           <thead>
             <tr className="border-b border-border-default text-left">
-              <th className="px-6 py-3.5 font-medium text-fg-muted">Name</th>
+              <th className="w-10 px-4 py-3.5">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  aria-label="Select all users"
+                  className="h-4 w-4 accent-[var(--color-accent)]"
+                />
+              </th>
+              <th className="px-2 py-3.5 font-medium text-fg-muted">Name</th>
               <th className="px-4 py-3.5 font-medium text-fg-muted">Role</th>
               <th className="px-4 py-3.5 font-medium text-fg-muted">Status</th>
               <th className="px-4 py-3.5 font-medium text-fg-muted">Allowance {year}</th>
@@ -361,14 +472,23 @@ export function AdminUsers() {
           <tbody className="divide-y divide-border-default">
             {usersQuery.isLoading && (
               <tr>
-                <td colSpan={5} className="px-6 py-6 text-fg-muted">
+                <td colSpan={6} className="px-6 py-6 text-fg-muted">
                   Loading…
                 </td>
               </tr>
             )}
             {users.map((user) => (
               <tr key={user.id} className={user.active ? undefined : "opacity-60"}>
-                <td className="px-6 py-3.5">
+                <td className="px-4 py-3.5">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(user.id)}
+                    onChange={() => toggleOne(user.id)}
+                    aria-label={`Select ${user.name}`}
+                    className="h-4 w-4 accent-[var(--color-accent)]"
+                  />
+                </td>
+                <td className="px-2 py-3.5">
                   <div className="flex items-center gap-3">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent-strong">
                       {initials(user.name)}
@@ -397,6 +517,24 @@ export function AdminUsers() {
                     <Button
                       variant="outline"
                       size="sm"
+                      disabled={roleMutation.isPending || user.id === currentUser?.id}
+                      title={
+                        user.id === currentUser?.id
+                          ? "You cannot change your own role"
+                          : undefined
+                      }
+                      onClick={() =>
+                        roleMutation.mutate({
+                          id: user.id,
+                          role: user.role === "admin" ? "member" : "admin",
+                        })
+                      }
+                    >
+                      {user.role === "admin" ? "Make member" : "Make admin"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => setPasswordTarget(user)}
                     >
                       <KeyRound className="h-3.5 w-3.5" />
@@ -405,7 +543,12 @@ export function AdminUsers() {
                     <Button
                       variant={user.active ? "outline" : "subtle"}
                       size="sm"
-                      disabled={activeMutation.isPending}
+                      disabled={activeMutation.isPending || user.id === currentUser?.id}
+                      title={
+                        user.id === currentUser?.id
+                          ? "You cannot deactivate your own account"
+                          : undefined
+                      }
                       onClick={() =>
                         activeMutation.mutate({ id: user.id, active: !user.active })
                       }
