@@ -1,54 +1,48 @@
-# BV Vacation
+# daysoff-app
 
-A friction-free vacation-day tracker for small teams. Book vacation and sick days in two clicks, see your remaining allowance at a glance, and keep an eye on who is out across the whole year — all on a single Personizer-style year calendar.
+Frontend for **Daysoff**, an open-source, self-hosted vacation day tracker for small teams: a React web app plus a thin Tauri v2 desktop shell for macOS and Windows. The backend lives at [daysoff-api](https://github.com/CareyScott/daysoff-api).
 
-**Features**
+## White-label branding
 
-- Year-at-a-glance calendar with weekday-aligned month rows; click any free weekday to book
-- Allowance ring showing remaining days for the selected year
-- Team overview with per-user year strips
-- Admin area: manage users, yearly allowances, passwords, activation
-- Forced password change on first login
+Admins customize the workspace in-app (Settings → Workspace), stored in your own database:
 
-This is the web frontend. It talks to a separate Rust API (`bv-vacation-api`) over plain JSON + Bearer auth, and is designed to later be wrapped in Tauri without code changes (no Tauri APIs are used — plain `fetch` only).
+- Company name (sidebar, login screen, browser tab title)
+- Team color or a two-color gradient
+- Company logo (shown in the app and used as the favicon)
+
+The desktop app icon is baked in at build time by Tauri. To ship desktop builds with your own icon, replace the source image and regenerate before tagging a release:
+
+```sh
+npx tauri icon path/to/your-icon.png
+```
+
+## Stack
+
+React 19, Vite 7, TypeScript, Tailwind v4, Radix primitives, TanStack Query, React Router 7. The app talks to the API with plain `fetch` + JSON + Bearer auth; no Tauri APIs are used, so web and desktop run the identical code.
 
 ## Development
 
 ```sh
 npm install
-npm run dev        # http://localhost:1420
+npm run dev          # http://localhost:1420 (expects the API on localhost:3000)
+npm run typecheck
+npm run build
+npm run tauri dev    # desktop shell around the dev server
 ```
 
-Other scripts:
+`VITE_API_URL` sets the API base URL (see `.env.example`). Production builds fall back to the hosted API URL in `src/lib/api.ts` — change that constant when self-hosting.
 
-```sh
-npm run typecheck  # tsc --noEmit
-npm run build      # typecheck + production build to dist/
-npm run preview    # serve the production build locally
-```
+## Deploy your own
 
-## Environment variables
+1. Deploy the [API + database](https://github.com/CareyScott/daysoff-api) first.
+2. Create a Vercel project from this repo (framework: Vite). Set `VITE_API_URL` to your API URL.
+3. `vercel deploy --prod` (or use the GitHub integration). `vercel.json` includes the SPA fallback rewrite.
+4. Add your web app URL to the API's `ALLOWED_ORIGINS` env var.
 
-Env files are not committed. Create them locally:
+## Desktop releases
 
-`.env.development`
+Pushing a tag `v*` runs the GitHub Actions workflow: macOS (Apple Silicon + Intel) and Windows installers are built and attached to a GitHub Release. Builds are unsigned; first launch requires right-click → Open on macOS or SmartScreen → "Run anyway" on Windows.
 
-```
-VITE_API_URL=http://localhost:3000
-```
+## License
 
-`.env.production`
-
-```
-VITE_API_URL=https://bv-vacation-api.vercel.app
-```
-
-`VITE_API_URL` is the base URL of the BV Vacation API. All requests are sent to `${VITE_API_URL}/api/...` with an `Authorization: Bearer <token>` header once logged in.
-
-## Tech stack
-
-React 19, Vite 7, TypeScript, react-router-dom 7, TanStack Query 5, Tailwind CSS v4, Radix UI primitives, lucide-react, zod.
-
-## Open source
-
-Licensed under the [MIT License](./LICENSE). Contributions and issues welcome.
+MIT

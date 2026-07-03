@@ -1,8 +1,8 @@
 import type { User } from "@/lib/types";
 
 // Fallback keeps fresh clones and CI Tauri builds working without env files.
-const BASE_URL = import.meta.env.VITE_API_URL ?? "https://bv-vacation-api.vercel.app";
-const STORAGE_KEY = "bv-vacation";
+const BASE_URL = import.meta.env.VITE_API_URL ?? "https://daysoff-api.vercel.app";
+const STORAGE_KEY = "daysoff";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -47,7 +47,7 @@ interface RequestOptions {
 }
 
 /**
- * Fetch wrapper for the BV Vacation API.
+ * Fetch wrapper for the Daysoff API.
  * - Prefixes VITE_API_URL, sends/parses JSON.
  * - Attaches `Authorization: Bearer <token>` from localStorage.
  * - Throws ApiError(status, message) using the `{error}` body when present.

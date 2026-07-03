@@ -42,15 +42,15 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VITE_API_URL: https://bv-vacation-api.vercel.app
+          VITE_API_URL: https://daysoff-api.vercel.app
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "BV Vacation ${{ github.ref_name }}"
+          releaseName: "Daysoff ${{ github.ref_name }}"
           releaseBody: |
             Desktop builds for macOS and Windows.
 
             Unsigned builds:
-            - macOS: right-click the app and choose Open the first time (or run `xattr -cr "/Applications/BV Vacation.app"`).
+            - macOS: right-click the app and choose Open the first time (or run `xattr -cr "/Applications/Daysoff.app"`).
             - Windows: SmartScreen may warn; choose "More info" then "Run anyway".
           releaseDraft: false
           prerelease: false

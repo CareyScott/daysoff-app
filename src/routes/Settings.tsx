@@ -1,14 +1,204 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ShieldAlert } from "lucide-react";
 import { z } from "zod";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useBranding, type WorkspaceSettings } from "@/lib/branding";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+/** Downscale an uploaded image to a small PNG data URL (fits in the DB). */
+async function fileToLogoDataUrl(file: File): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error("Not a valid image"));
+    el.src = dataUrl;
+  });
+  const MAX = 192;
+  const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(img.width * scale));
+  canvas.height = Math.max(1, Math.round(img.height * scale));
+  canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/png");
+}
+
+function WorkspaceCard() {
+  const branding = useBranding();
+  const queryClient = useQueryClient();
+  const [companyName, setCompanyName] = useState(branding.company_name);
+  const [accentColor, setAccentColor] = useState(branding.accent_color);
+  const [useGradient, setUseGradient] = useState(Boolean(branding.accent_color2));
+  const [accentColor2, setAccentColor2] = useState(branding.accent_color2 ?? "#7c3aed");
+  const [logoData, setLogoData] = useState<string | null>(branding.logo_data);
+  const [saved, setSaved] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+
+  // Sync local form once the settings query resolves.
+  useEffect(() => {
+    setCompanyName(branding.company_name);
+    setAccentColor(branding.accent_color);
+    setUseGradient(Boolean(branding.accent_color2));
+    if (branding.accent_color2) setAccentColor2(branding.accent_color2);
+    setLogoData(branding.logo_data);
+  }, [branding.company_name, branding.accent_color, branding.accent_color2, branding.logo_data]);
+
+  const mutation = useMutation({
+    mutationFn: (body: WorkspaceSettings) =>
+      api<WorkspaceSettings>("/api/settings", { method: "PUT", body }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["settings"] });
+      setSaved(true);
+    },
+  });
+
+  const error =
+    logoError ??
+    (mutation.isError
+      ? mutation.error instanceof ApiError
+        ? mutation.error.message
+        : "Something went wrong. Please try again."
+      : null);
+
+  const previewBackground = useGradient
+    ? `linear-gradient(135deg, ${accentColor}, ${accentColor2})`
+    : accentColor;
+
+  return (
+    <div className="card max-w-lg p-6">
+      <h2 className="text-section">Workspace</h2>
+      <p className="mt-1 text-sm text-fg-muted">
+        Company name, colors and logo, shown to everyone on this workspace.
+      </p>
+      <form
+        className="mt-4 space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setSaved(false);
+          setLogoError(null);
+          mutation.mutate({
+            company_name: companyName.trim(),
+            accent_color: accentColor,
+            accent_color2: useGradient ? accentColor2 : null,
+            logo_data: logoData,
+          });
+        }}
+      >
+        <div className="space-y-1.5">
+          <Label htmlFor="workspace-name">Company name</Label>
+          <Input
+            id="workspace-name"
+            value={companyName}
+            onChange={(event) => setCompanyName(event.target.value)}
+            maxLength={60}
+            required
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="workspace-color">Team color</Label>
+          <div className="flex items-center gap-3">
+            <input
+              id="workspace-color"
+              type="color"
+              value={accentColor}
+              onChange={(event) => setAccentColor(event.target.value)}
+              className="h-9 w-14 cursor-pointer rounded-md border border-border-default bg-bg-surface p-1"
+            />
+            <label className="flex items-center gap-2 text-sm text-fg-muted">
+              <input
+                type="checkbox"
+                checked={useGradient}
+                onChange={(event) => setUseGradient(event.target.checked)}
+                className="h-4 w-4 accent-[var(--color-accent)]"
+              />
+              Gradient
+            </label>
+            {useGradient && (
+              <input
+                aria-label="Second gradient color"
+                type="color"
+                value={accentColor2}
+                onChange={(event) => setAccentColor2(event.target.value)}
+                className="h-9 w-14 cursor-pointer rounded-md border border-border-default bg-bg-surface p-1"
+              />
+            )}
+            <span
+              className="ml-auto h-9 w-24 rounded-md border border-border-default"
+              style={{ background: previewBackground }}
+              aria-hidden
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="workspace-logo">Logo</Label>
+          <div className="flex items-center gap-3">
+            {logoData ? (
+              <img
+                src={logoData}
+                alt="Company logo"
+                className="h-10 w-10 rounded-lg border border-border-default object-contain"
+              />
+            ) : (
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-dashed border-border-default text-xs text-fg-subtle">
+                none
+              </span>
+            )}
+            <input
+              id="workspace-logo"
+              type="file"
+              accept="image/*"
+              className="text-sm text-fg-muted file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                setLogoError(null);
+                fileToLogoDataUrl(file)
+                  .then(setLogoData)
+                  .catch((err: Error) => setLogoError(err.message));
+              }}
+            />
+            {logoData && (
+              <Button type="button" variant="ghost" onClick={() => setLogoData(null)}>
+                Remove
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-fg-subtle">
+            Shown in the sidebar, login screen and browser tab. Downscaled automatically.
+          </p>
+        </div>
+
+        {error && (
+          <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger" role="alert">
+            {error}
+          </p>
+        )}
+        {saved && (
+          <p className="rounded-lg bg-accent-soft px-3 py-2 text-sm text-accent-strong">
+            Workspace updated.
+          </p>
+        )}
+
+        <Button type="submit" disabled={mutation.isPending}>
+          {mutation.isPending ? "Saving…" : "Save workspace"}
+        </Button>
+      </form>
+    </div>
+  );
+}
 
 const passwordSchema = z
   .object({
@@ -93,6 +283,8 @@ export function Settings() {
           </div>
         </div>
       )}
+
+      {user?.role === "admin" && !mustChange && <WorkspaceCard />}
 
       <div className="card max-w-lg p-6">
         <h2 className="text-section">Account</h2>

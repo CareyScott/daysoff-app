@@ -5,10 +5,11 @@ import {
   LogOut,
   Settings as SettingsIcon,
   ShieldCheck,
-  Sun,
   Users,
 } from "lucide-react";
+import { BrandMark } from "@/components/app/BrandMark";
 import { useAuth } from "@/lib/auth";
+import { useBranding } from "@/lib/branding";
 import { cn, initials } from "@/lib/utils";
 
 interface NavItem {
@@ -20,6 +21,7 @@ interface NavItem {
 
 export function Layout() {
   const { user, logout } = useAuth();
+  const branding = useBranding();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -42,10 +44,10 @@ export function Layout() {
     <div className="flex min-h-screen">
       <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-border-default bg-bg-sidebar px-3 py-5">
         <div className="flex items-center gap-2.5 px-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-fg shadow-sm">
-            <Sun className="h-4.5 w-4.5" />
+          <BrandMark className="h-8 w-8" />
+          <span className="truncate text-[15px] font-semibold tracking-tight">
+            {branding.company_name}
           </span>
-          <span className="text-[15px] font-semibold tracking-tight">BV Vacation</span>
         </div>
 
         <nav className="mt-8 flex-1 space-y-1">

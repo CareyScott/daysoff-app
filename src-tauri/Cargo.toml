@@ -1,12 +1,12 @@
 [package]
-name = "bv-vacation"
+name = "daysoff"
 version = "0.1.0"
-description = "BV Vacation — friction-free vacation day tracking"
+description = "Daysoff — friction-free vacation day tracking"
 edition = "2021"
 license = "MIT"
 
 [lib]
-name = "bv_vacation_lib"
+name = "daysoff_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

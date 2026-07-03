@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { Sun } from "lucide-react";
+import { BrandMark } from "@/components/app/BrandMark";
 import { useAuth } from "@/lib/auth";
+import { useBranding } from "@/lib/branding";
 import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,7 @@ import { Label } from "@/components/ui/label";
 
 export function Login() {
   const { token, login } = useAuth();
+  const branding = useBranding();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,10 +45,10 @@ export function Login() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="card w-full max-w-sm p-8">
         <div className="flex flex-col items-center text-center">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-accent-fg shadow-sm">
-            <Sun className="h-5 w-5" />
-          </span>
-          <h1 className="mt-4 text-xl font-semibold tracking-tight">BV Vacation</h1>
+          <BrandMark className="h-11 w-11 rounded-xl" />
+          <h1 className="mt-4 text-xl font-semibold tracking-tight">
+            {branding.company_name}
+          </h1>
           <p className="mt-1 text-sm text-fg-muted">Sign in to track your days off</p>
         </div>
 
