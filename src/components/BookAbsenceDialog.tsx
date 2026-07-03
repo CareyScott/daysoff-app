@@ -48,11 +48,14 @@ export function BookAbsenceDialog({
   const [note, setNote] = useState("");
   const [forUserId, setForUserId] = useState<string>("");
 
-  // Admins can book on behalf of teammates.
+  // Overview powers the admin "For" select and clash warnings for everyone.
+  const overviewYear = startDate
+    ? Number(startDate.slice(0, 4))
+    : new Date().getFullYear();
   const overviewQuery = useQuery({
-    queryKey: ["overview", new Date().getFullYear()],
-    queryFn: () => api<OverviewResponse>("/api/overview"),
-    enabled: open && isAdmin,
+    queryKey: ["overview", overviewYear],
+    queryFn: () => api<OverviewResponse>(`/api/overview?year=${overviewYear}`),
+    enabled: open,
   });
   const teammates = (overviewQuery.data?.users ?? []).filter((u) => u.active);
 
@@ -97,6 +100,26 @@ export function BookAbsenceDialog({
   // Members' vacation requests need admin sign-off when the workspace says so.
   const needsApproval =
     branding.require_approval && user?.role === "member" && kind === "vacation";
+
+  // Non-blocking heads-up when the chosen dates overlap teammates' absences.
+  const targetUserId = isAdmin && forUserId ? forUserId : user?.id;
+  const clashes = (() => {
+    if (!startDate || !endDate || endDate < startDate) return [];
+    const names = new Map(teammates.map((t) => [t.id, t.name]));
+    return (overviewQuery.data?.absences ?? [])
+      .filter(
+        (a) =>
+          a.user_id !== targetUserId &&
+          a.status !== "denied" &&
+          a.start_date <= endDate &&
+          a.end_date >= startDate,
+      )
+      .map((a) => ({
+        name: names.get(a.user_id) ?? "A teammate",
+        range: `${a.start_date <= startDate ? startDate : a.start_date} – ${a.end_date >= endDate ? endDate : a.end_date}`,
+        pending: a.status === "pending",
+      }));
+  })();
 
   const errorMessage =
     mutation.error instanceof ApiError
@@ -228,6 +251,24 @@ export function BookAbsenceDialog({
               "Pick a start and end date"
             )}
           </div>
+
+          {clashes.length > 0 && (
+            <div className="rounded-lg border border-sick/40 bg-sick-soft px-3 py-2 text-sm text-sick-strong">
+              <p className="font-medium">
+                Heads up: this would clash with{" "}
+                {clashes.length === 1 ? "a teammate" : `${clashes.length} teammates`}.
+              </p>
+              <ul className="mt-1 space-y-0.5 text-xs">
+                {clashes.slice(0, 4).map((clash, i) => (
+                  <li key={i}>
+                    {clash.name}
+                    {clash.pending ? " (pending request)" : ""} is away {clash.range}
+                  </li>
+                ))}
+                {clashes.length > 4 && <li>…and {clashes.length - 4} more</li>}
+              </ul>
+            </div>
+          )}
 
           {needsApproval && (
             <p className="text-xs text-fg-muted">

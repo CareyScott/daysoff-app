@@ -10,6 +10,8 @@ export interface DayCellProps {
   isToday: boolean;
   /** Weekday cells are clickable when true (book / cancel). */
   interactive: boolean;
+  /** Teammates away this day (shown as a dot marker + tooltip). */
+  others?: string[];
   onSelect?: () => void;
 }
 
@@ -19,14 +21,18 @@ export function DayCell({
   companyDay,
   isToday,
   interactive,
+  others,
   onSelect,
 }: DayCellProps) {
   const kind = absence?.kind;
   const pending = absence?.status === "pending";
   const isCompanyDay = !absence && Boolean(companyDay);
 
+  const hasOthers = Boolean(others?.length) && !day.weekend;
+  const othersTitle = hasOthers ? `Away: ${others!.join(", ")}` : "";
+
   const className = cn(
-    "flex h-6 w-full select-none items-center justify-center rounded-[5px] text-[10px] leading-none tabular-nums transition-colors",
+    "relative flex h-6 w-full select-none items-center justify-center rounded-[5px] text-[10px] leading-none tabular-nums transition-colors",
     day.weekend
       ? "bg-bg-muted/45 text-fg-subtle/55"
       : kind === "vacation"
@@ -53,8 +59,25 @@ export function DayCell({
 
   if (!interactive || day.weekend) {
     return (
-      <div className={className} style={style} title={isCompanyDay ? companyDay?.name : undefined}>
+      <div
+        className={className}
+        style={style}
+        title={
+          [isCompanyDay ? companyDay?.name : undefined, othersTitle || undefined]
+            .filter(Boolean)
+            .join(" · ") || undefined
+        }
+      >
         {label}
+      {hasOthers && (
+        <span
+          aria-hidden
+          className={cn(
+            "absolute bottom-[2px] left-1/2 h-[3px] w-[3px] -translate-x-1/2 rounded-full",
+            kind || isCompanyDay ? "bg-white/80" : "bg-fg-subtle",
+          )}
+        />
+      )}
       </div>
     );
   }
@@ -65,15 +88,27 @@ export function DayCell({
       className={className}
       style={style}
       onClick={onSelect}
-      title={
+      title={[
         kind
           ? `${kind === "vacation" ? "Vacation" : "Sick"}${pending ? " (pending)" : ""} on ${day.iso} (click to cancel)`
           : isCompanyDay
             ? companyDay?.name
-            : `Book absence starting ${day.iso}`
-      }
+            : `Book absence starting ${day.iso}`,
+        othersTitle || undefined,
+      ]
+        .filter(Boolean)
+        .join(" · ")}
     >
       {label}
+      {hasOthers && (
+        <span
+          aria-hidden
+          className={cn(
+            "absolute bottom-[2px] left-1/2 h-[3px] w-[3px] -translate-x-1/2 rounded-full",
+            kind || isCompanyDay ? "bg-white/80" : "bg-fg-subtle",
+          )}
+        />
+      )}
     </button>
   );
 }

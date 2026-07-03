@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { queryKeys } from "@/lib/queryClient";
-import type { Absence, CompanyDay, MeResponse } from "@/lib/types";
-import { formatDateRange } from "@/lib/dates";
+import type { Absence, CompanyDay, MeResponse, OverviewResponse } from "@/lib/types";
+import { eachDayOfRange, formatDateRange } from "@/lib/dates";
 import { YearSwitcher } from "@/components/app/YearSwitcher";
 import { YearGrid } from "@/components/calendar/YearGrid";
 import { MonthWidget } from "@/components/calendar/MonthWidget";
@@ -36,6 +37,12 @@ function Legend() {
         Pending
       </span>
       <span className="flex items-center gap-1.5">
+        <span className="relative h-3 w-3 rounded bg-bg-muted">
+          <span className="absolute bottom-[1px] left-1/2 h-[3px] w-[3px] -translate-x-1/2 rounded-full bg-fg-subtle" />
+        </span>{" "}
+        Teammate away
+      </span>
+      <span className="flex items-center gap-1.5">
         <span className="h-3 w-3 rounded bg-bg-muted" /> Weekend
       </span>
       <span className="flex items-center gap-1.5">
@@ -59,15 +66,44 @@ export function MyCalendar() {
     queryFn: () => api<MeResponse>(`/api/me?year=${year}`),
   });
 
+  const { user } = useAuth();
+
+  // Own absences only — teammates' absences come from the overview and are
+  // rendered as attributed markers, never as if they were the viewer's own.
   const absencesQuery = useQuery({
-    queryKey: queryKeys.absences(year),
-    queryFn: () => api<Absence[]>(`/api/absences?year=${year}`),
+    queryKey: [...queryKeys.absences(year), user?.id],
+    queryFn: () => api<Absence[]>(`/api/absences?year=${year}&user_id=${user?.id}`),
+    enabled: Boolean(user?.id),
+  });
+
+  const overviewQuery = useQuery({
+    queryKey: queryKeys.overview(year),
+    queryFn: () => api<OverviewResponse>(`/api/overview?year=${year}`),
   });
 
   const companyDaysQuery = useQuery({
     queryKey: ["company-days", year],
     queryFn: () => api<CompanyDay[]>(`/api/company-days?year=${year}`),
   });
+
+  // iso date -> teammate names away that day (excludes self and denied).
+  const othersByDay = useMemo(() => {
+    const map = new Map<string, string[]>();
+    const users = new Map(
+      (overviewQuery.data?.users ?? []).map((u) => [u.id, u.name]),
+    );
+    for (const absence of overviewQuery.data?.absences ?? []) {
+      if (absence.user_id === user?.id || absence.status === "denied") continue;
+      const name = users.get(absence.user_id) ?? "Teammate";
+      const label = `${name}${absence.status === "pending" ? " (pending)" : ""}`;
+      for (const iso of eachDayOfRange(absence.start_date, absence.end_date)) {
+        const list = map.get(iso) ?? [];
+        list.push(label);
+        map.set(iso, list);
+      }
+    }
+    return map;
+  }, [overviewQuery.data, user?.id]);
 
   const cancelMutation = useMutation({
     mutationFn: (id: string) => api<void>(`/api/absences/${id}`, { method: "DELETE" }),
@@ -159,6 +195,7 @@ export function MyCalendar() {
             year={year}
             absences={absences}
             companyDays={companyDaysQuery.data ?? []}
+            othersByDay={othersByDay}
             onDayClick={openBooking}
             onAbsenceClick={setCancelTarget}
           />

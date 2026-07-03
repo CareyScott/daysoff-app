@@ -18,6 +18,8 @@ export interface YearGridProps {
   absences: Absence[];
   /** Workspace-wide days off (rendered blue; own absences win). */
   companyDays?: CompanyDay[];
+  /** iso day -> teammate names away that day (attributed dot markers). */
+  othersByDay?: Map<string, string[]>;
   onDayClick?: (iso: string) => void;
   onAbsenceClick?: (absence: Absence) => void;
 }
@@ -31,6 +33,7 @@ export function YearGrid({
   year,
   absences,
   companyDays,
+  othersByDay,
   onDayClick,
   onAbsenceClick,
 }: YearGridProps) {
@@ -78,6 +81,7 @@ export function YearGrid({
                     day={day}
                     absence={absence}
                     companyDay={companyMap.get(day.iso)}
+                    others={othersByDay?.get(day.iso)}
                     isToday={day.iso === todayIso}
                     interactive={!day.weekend}
                     onSelect={() =>

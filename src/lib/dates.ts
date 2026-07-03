@@ -112,6 +112,18 @@ export function buildYearDays(year: number): YearDay[] {
   return days;
 }
 
+/** Every ISO day in [startIso, endIso] inclusive. */
+export function eachDayOfRange(startIso: string, endIso: string): string[] {
+  const days: string[] = [];
+  const end = parseISODate(endIso);
+  const cur = parseISODate(startIso);
+  while (cur <= end) {
+    days.push(toISODate(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return days;
+}
+
 /**
  * Map of every covered ISO day -> its absence, for O(1) day coloring.
  * Denied absences are excluded: their dates are free again.
