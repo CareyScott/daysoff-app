@@ -18,14 +18,36 @@ export const DEFAULT_BRANDING: WorkspaceSettings = {
   logo_data: null,
 };
 
+const BRANDING_CACHE_KEY = "daysoff-branding";
+
+function readCachedBranding(): WorkspaceSettings | undefined {
+  try {
+    const raw = localStorage.getItem(BRANDING_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as WorkspaceSettings) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Workspace branding from the API (public endpoint, available on the
- * login screen too). Falls back to defaults while loading or offline.
+ * login screen too). Paints instantly from a localStorage snapshot of the
+ * last-seen branding (avoids a flash of default styling on refresh) and
+ * refreshes from the server in the background.
  */
 export function useBranding(): WorkspaceSettings {
   const { data } = useQuery({
     queryKey: ["settings"],
-    queryFn: () => api<WorkspaceSettings>("/api/settings"),
+    queryFn: async () => {
+      const settings = await api<WorkspaceSettings>("/api/settings");
+      try {
+        localStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(settings));
+      } catch {
+        // cache is best-effort
+      }
+      return settings;
+    },
+    placeholderData: readCachedBranding,
     staleTime: 5 * 60_000,
     retry: 1,
   });
